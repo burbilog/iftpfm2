@@ -1,6 +1,8 @@
 //use std::io;
 
 use ftp::FtpStream;
+use std::time::SystemTime;
+use chrono::DateTime; 
 
 use crate::log;
 use crate::conf;
@@ -60,6 +62,19 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
 
     // Transfer each file from the source to the target directory
     for filename in file_list {
+        // Get the modified time of the file on the FTP server
+        let modified_time_str = ftp_from.mdtm(filename.as_str()).unwrap().unwrap();
+        log::log(modified_time_str.to_string().as_str());
+        let modified_time = DateTime::parse_from_str(modified_time_str.to_string().as_str(), "%Y%m%d%H%M%S").unwrap().into();
+
+        // Calculate the age of the file
+        let file_age = SystemTime::now().duration_since(modified_time).unwrap().as_secs();
+
+        // Skip the file if it is younger than the specified age
+        if file_age < (config.age as u64) {
+            log::log(format!("Skipping file {}, it is {} seconds old, less than specified age {} seconds", filename, file_age, config.age).as_str()).unwrap();
+            continue;
+        }
         log::log(format!("Transferring file {}", filename).as_str()).unwrap();
         match ftp_to.rm(filename.as_str()) {
             Ok(_) => log::log(format!("Deleted file {} at TARGET FTP server", filename).as_str()).unwrap(),
