@@ -51,7 +51,6 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
     }
 
     // Get the list of files in the source directory
-    //let file_list = ftp_from.nlst(None).unwrap();
     let file_list = match ftp_from.nlst(None) {
         Ok(list) => list,
         Err(e) => {
@@ -62,9 +61,16 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
 
     // Transfer each file from the source to the target directory
     for filename in file_list {
+        log::log(format!("Working on file {}", filename).as_str()).unwrap();
         // Get the modified time of the file on the FTP server
-        let modified_time_str = ftp_from.mdtm(filename.as_str()).unwrap().unwrap();
-        log::log(modified_time_str.to_string().as_str());
+        //let modified_time_str = ftp_from.mdtm(filename.as_str()).unwrap().unwrap();
+        let modified_time_str = match ftp_from.mdtm(filename.as_str()) {
+            Ok(time) => time.unwrap(),
+            Err(e) => {
+                log::log(&format!("Error getting modified time for file(?) '{}': {}, skipping", filename, e));
+                continue;
+            }
+        };
         let modified_time = DateTime::parse_from_str(modified_time_str.to_string().as_str(), "%Y%m%d%H%M%S").unwrap().into();
 
         // Calculate the age of the file
