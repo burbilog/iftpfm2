@@ -65,9 +65,13 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
         // Get the modified time of the file on the FTP server
         //let modified_time_str = ftp_from.mdtm(filename.as_str()).unwrap().unwrap();
         let modified_time_str = match ftp_from.mdtm(filename.as_str()) {
-            Ok(time) => time.unwrap(),
+            Ok(time) => {
+                // too noisy
+                //log::log(&format!("Successfully retrieved modified time '{}' for file '{}'", time.unwrap(), filename)).unwrap();
+                time.unwrap()
+            },
             Err(e) => {
-                log::log(&format!("Error getting modified time for file(?) '{}': {}, skipping", filename, e));
+                log::log(&format!("Error getting modified time for file(?) '{}': {}, skipping", filename, e)).unwrap();
                 continue;
             }
         };
