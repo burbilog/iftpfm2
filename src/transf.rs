@@ -14,13 +14,18 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
             return;
         },
     };
-    //ftp_from.login(config.login_from.as_str(), config.password_from.as_str()).unwrap();
     ftp_from.login(config.login_from.as_str(), config.password_from.as_str())
         .unwrap_or_else(|e| {
             log::log(format!("Error logging into SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
             return;
         });
-    ftp_from.cwd(config.path_from.as_str()).unwrap();
+    match ftp_from.cwd(config.path_from.as_str()) {
+        Ok(_) => (),
+        Err(e) => {
+            log::log(format!("Error changing directory on SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
+            return;
+        },
+    }
 
     // Connect to the target FTP server
     let mut ftp_to = match FtpStream::connect((config.ip_address_to.as_str(), config.port_to)) {
@@ -30,16 +35,28 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
             return;
         },
     };
-    //ftp_to.login(config.login_to.as_str(), config.password_to.as_str()).unwrap();
     ftp_to.login(config.login_to.as_str(), config.password_to.as_str())
         .unwrap_or_else(|e| {
             log::log(format!("Error logging into TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
             return;
         });
-    ftp_to.cwd(config.path_to.as_str()).unwrap();
+    match ftp_to.cwd(config.path_to.as_str()) {
+        Ok(_) => (),
+        Err(e) => {
+            log::log(format!("Error changing directory on TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
+            return;
+        },
+    }
 
     // Get the list of files in the source directory
-    let file_list = ftp_from.nlst(None).unwrap();
+    //let file_list = ftp_from.nlst(None).unwrap();
+    let file_list = match ftp_from.nlst(None) {
+        Ok(list) => list,
+        Err(e) => {
+            log::log(format!("Error getting file list from SOURCE FTP server: {}", e).as_str()).unwrap();
+            return;
+        },
+    };
 
     // Transfer each file from the source to the target directory
     for filename in file_list {
@@ -66,8 +83,14 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
 
         // Delete the source file if specified
         if delete {
-            ftp_from.rm(filename.as_str()).unwrap();
-            log::log(format!("Deleted file {} at SOURCE FTP server", filename).as_str()).unwrap();
+            match ftp_from.rm(filename.as_str()) {
+                Ok(_) => {
+                    log::log(format!("Deleted SOURCE file {}", filename).as_str()).unwrap();
+                },
+                Err(e) => {
+                    log::log(format!("Error deleting SOURCE file {}: {}", filename, e).as_str()).unwrap();
+                }
+            }
         }
     }
 }
