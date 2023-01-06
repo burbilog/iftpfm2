@@ -42,6 +42,8 @@ pub fn set_log_file<P: AsRef<Path>>(path: P) {
 
 #[cfg(test)]
 use tempfile::tempdir;
+#[cfg(test)]
+use std::fs::remove_file;
 
 #[test]
 fn test_log_to_file() {

@@ -14,7 +14,12 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
             return;
         },
     };
-    ftp_from.login(config.login_from.as_str(), config.password_from.as_str()).unwrap();
+    //ftp_from.login(config.login_from.as_str(), config.password_from.as_str()).unwrap();
+    ftp_from.login(config.login_from.as_str(), config.password_from.as_str())
+        .unwrap_or_else(|e| {
+            log::log(format!("Error logging into SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
+            return;
+        });
     ftp_from.cwd(config.path_from.as_str()).unwrap();
 
     // Connect to the target FTP server
@@ -25,7 +30,12 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
             return;
         },
     };
-    ftp_to.login(config.login_to.as_str(), config.password_to.as_str()).unwrap();
+    //ftp_to.login(config.login_to.as_str(), config.password_to.as_str()).unwrap();
+    ftp_to.login(config.login_to.as_str(), config.password_to.as_str())
+        .unwrap_or_else(|e| {
+            log::log(format!("Error logging into TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
+            return;
+        });
     ftp_to.cwd(config.path_to.as_str()).unwrap();
 
     // Get the list of files in the source directory
@@ -57,7 +67,7 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
         // Delete the source file if specified
         if delete {
             ftp_from.rm(filename.as_str()).unwrap();
-            log::log(format!("Deleted file {}", filename).as_str()).unwrap();
+            log::log(format!("Deleted file {} at SOURCE FTP server", filename).as_str()).unwrap();
         }
     }
 }
