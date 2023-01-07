@@ -25,7 +25,7 @@ If Git is not installed, you can install it by following the instructions on the
 3. Next, clone the ifptfm2 repository by running the following command:
 
 ~~~
-git clone https://github.com/<your_username>/ifptfm2.git
+git clone https://github.com/burbilog/ifptfm2.git
 ~~~
 
 This will create a new directory called ifptfm2 in your current location, containing all the source code for the program.
