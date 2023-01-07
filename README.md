@@ -103,6 +103,8 @@ Copy \*.zip files instead of \*.xml, delete source files and log debug output to
 iftpfm2 -d -x ".*\.zip" -l /tmp/iftpfm2.log config.csv
 ~~~
 
+Keep in mind that the file pattern is a regular expression, not a standard shell glob.
+
 Author
 ======
 
