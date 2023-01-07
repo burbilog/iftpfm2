@@ -9,12 +9,13 @@ use std::path::Path;
 use chrono::{Local};
 use ftp::FtpStream;
 use std::time::SystemTime;
-use chrono::DateTime; 
+use chrono::DateTime;
+use regex::Regex;
 
 
 fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-x \"*.xml\"] [-l logfile] config_file",
+        "Usage: {} [-h] [-v] [-d] [-x \".*\\.xml\"] [-l logfile] config_file",
         PROGRAM_NAME
     );
 }
@@ -41,7 +42,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
             }
             "-d" => delete = true,
             "-l" => log_file = Some(args.next().expect("Missing log file argument")),
-            "-x" => ext = Some(args.next().expect("Missing file extension argument")),
+            "-x" => ext = Some(args.next().expect("Missing matching regexp argument")),
             _ => {
                 config_file = Some(arg);
             }
@@ -55,7 +56,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
     }
 
     if ext.is_none() {
-        ext = Some("*.xml".to_string());
+        ext = Some(".*\\.xml".to_string());
     }
 
     (delete, log_file, config_file, ext)
@@ -278,17 +279,30 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
     }
 
     // Get the list of files in the source directory
-    let file_list = match ftp_from.nlst(ext.as_ref().map(String::as_str)) {
+    // Do not use NLST with paramter because pyftpdlib does not understand that
+    let file_list = match ftp_from.nlst(None) {
         Ok(list) => list,
         Err(e) => {
             log(format!("Error getting file list from SOURCE FTP server: {}", e).as_str()).unwrap();
             return;
         },
     };
-    log(format!("Number of files retrieved using pattern '{:?}': {}", ext, file_list.len()).as_str()).unwrap();
-
+    log(format!("Number of files retrieved using pattern: {}", file_list.len()).as_str()).unwrap();
+    let ext_regex = match ext.as_ref().map(String::as_str) {
+        Some(ext) => Regex::new(ext),
+        None => {
+            // Handle the case where `ext` is None
+            log(&format!("FUCK")).unwrap();
+            return;
+        }
+    };
+    let regex = ext_regex.unwrap();
     // Transfer each file from the source to the target directory
     for filename in file_list {
+        if !regex.is_match(&filename) {
+            log(format!("Skipping file {} as it did not match regex {}", filename, regex).as_str()).unwrap();
+            continue;
+        }
         //log(format!("Working on file {}", filename).as_str()).unwrap();
         // Get the modified time of the file on the FTP server
         let modified_time_str = match ftp_from.mdtm(filename.as_str()) {
