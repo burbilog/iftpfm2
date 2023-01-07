@@ -14,7 +14,9 @@ To install the ifptfm2 program, follow these steps:
 
 1. First, make sure you have Git installed on your system. You can check if Git is already installed by running the following command in your terminal:
 
+~~~
     git --version
+~~~
 
     If Git is not installed, you can install it by following the instructions on the Git website.  
 
