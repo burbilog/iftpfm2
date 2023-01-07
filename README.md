@@ -82,8 +82,8 @@ You can also use the following options:
     -l logfile: Write log information to the specified log file.
     -x pattern: Specify file matching pattern, defined by regular expression. Only files, matching this pattern will be transferred. By default ".*\.xml" pattern is used.
 
-Example
-=======
+Examples
+========
 
 Here is an example configuration file that transfers all files in the /outgoing directory on the FTP server at 192.168.0.1 to the /incoming directory on the FTP server at 192.168.0.2, if they are at least one day old:
 
