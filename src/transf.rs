@@ -1,5 +1,3 @@
-//use std::io;
-
 use ftp::FtpStream;
 use std::time::SystemTime;
 use chrono::DateTime; 
