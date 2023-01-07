@@ -24,17 +24,23 @@ If Git is not installed, you can install it by following the instructions on the
 
 3. Next, clone the ifptfm2 repository by running the following command:
 
-    git clone https://github.com/<your_username>/ifptfm2.git
+~~~
+git clone https://github.com/<your_username>/ifptfm2.git
+~~~
 
-    This will create a new directory called ifptfm2 in your current location, containing all the source code for the program.
+This will create a new directory called ifptfm2 in your current location, containing all the source code for the program.
 
 4. Change into the ifptfm2 directory by running:
 
-    cd ifptfm2
+~~~
+cd ifptfm2
+~~~
 
 5. Finally, build the program by running:
 
-    cargo build --release
+~~~
+cargo build --release
+~~~
 
 This will compile the program and create an executable file called ifptfm2 in the target/release directory.
 
