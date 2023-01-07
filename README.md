@@ -91,13 +91,13 @@ Here is an example configuration file that transfers all files in the /outgoing 
 192.168.0.1,21,user1,password1,/outgoing,192.168.0.2,21,user2,password2,/incoming,86400
 ~~~
 
-Add this text to config.txt and run iftpfm2 to move \*.xml files using this config file, moving files and deleting them from source server:
+Add this text to config.txt and run iftpfm2 to copy \*.xml files using this config file and delete source files after the transfer:
 
 ~~~
 iftpfm2 -d config.csv
 ~~~
 
-Move \*.zip files instead of \*.xml, delete source files and log debug output to file /tmp/iftpfm2.log:
+Copy \*.zip files instead of \*.xml, delete source files and log debug output to file /tmp/iftpfm2.log:
 
 ~~~
 iftpfm2 -d -x ".*\.zip" -l /tmp/iftpfm2.log config.csv
