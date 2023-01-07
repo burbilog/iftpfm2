@@ -390,7 +390,7 @@ fn main() {
             set_log_file(log_file);
     }
 
-    log("Begin of main()").unwrap();
+    log(format!("{} version {} started", PROGRAM_NAME, PROGRAM_VERSION).as_str()).unwrap();
 
     // Parse config file
     let config_file = config_file.unwrap();
@@ -401,7 +401,7 @@ fn main() {
         transfer_files(&cf, delete, ext.clone());
     }
 
-    log("End of main()").unwrap();
+    log(format!("{} version {} finished", PROGRAM_NAME, PROGRAM_VERSION).as_str()).unwrap();
 }
 
 
