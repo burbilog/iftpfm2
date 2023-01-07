@@ -8,10 +8,12 @@ fn print_usage() {
     );
 }
 
-pub fn parse_args() -> (bool, Option<String>, Option<String>) {
+pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
+    let mut ext = None;
+
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -28,6 +30,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>) {
             }
             "-d" => delete = true,
             "-l" => log_file = Some(args.next().expect("Missing log file argument")),
+            "-x" => ext = Some(args.next().expect("Missing file extension argument")),
             _ => {
                 config_file = Some(arg);
             }
@@ -40,6 +43,10 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>) {
         process::exit(1);
     }
 
-    (delete, log_file, config_file)
+    if ext.is_none() {
+        ext = Some("*.xml".to_string());
+    }
+
+    (delete, log_file, config_file, ext)
 }
 

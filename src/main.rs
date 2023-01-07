@@ -8,7 +8,7 @@ const PROGRAM_VERSION: &str = "2.0.0";
 
 fn main() {
     // Parse arguments and setup logging
-    let (delete, log_file, config_file) = args::parse_args();
+    let (delete, log_file, config_file, ext) = args::parse_args();
     if let Some(log_file) = log_file {
             log::set_log_file(log_file);
     }
@@ -21,7 +21,7 @@ fn main() {
 
     // Loop over each line in config file
     for cf in configs {
-        transf::transfer_files(&cf, delete);
+        transf::transfer_files(&cf, delete, ext.clone());
     }
 
     log::log("End of main()").unwrap();

@@ -18,17 +18,19 @@ To install the ifptfm2 program, follow these steps:
 
     If Git is not installed, you can install it by following the instructions on the Git website.  
 
-2. Next, clone the ifptfm2 repository by running the following command:
+2. Next, install Rust as described here https://www.rust-lang.org/learn/get-started or from your distro repository.
+
+3. Next, clone the ifptfm2 repository by running the following command:
 
     git clone https://github.com/<your_username>/ifptfm2.git
 
     This will create a new directory called ifptfm2 in your current location, containing all the source code for the program.
 
-3. Change into the ifptfm2 directory by running:
+4. Change into the ifptfm2 directory by running:
 
     cd ifptfm2
 
-4. Finally, build the program by running:
+5. Finally, build the program by running:
 
     cargo build --release
 
@@ -50,7 +52,7 @@ ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_
     port_from is the port number of the FTP server to transfer files from.
     login_from is the login name to use to connect to the FTP server to transfer files from.
     password_from is the password to use to connect to the FTP server to transfer files from.
-    path_from is the path on the FTP server to transfer files from. You can use * as a wildcard to transfer all files in the directory.
+    path_from is the path on the FTP server to transfer files from.
     ip_address_to is the IP address of the FTP server to transfer files to.
     port_to is the port number of the FTP server to transfer files to.
     login_to is the login name to use to connect to the FTP server to transfer files to.
@@ -75,7 +77,7 @@ Example
 Here is an example configuration file that transfers all files in the /incoming directory on the FTP server at 192.168.0.1 to the /outgoing directory on the FTP server at 192.168.0.2, if they are at least one day old:
 
 ~~~
-192.168.0.1,21,user1,password1,/incoming/*,192.168.0.2,21,user2,password2,/outgoing/,86400
+192.168.0.1,21,user1,password1,/incoming,192.168.0.2,21,user2,password2,/outgoing/,86400
 ~~~
 
 Author

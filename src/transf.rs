@@ -5,7 +5,7 @@ use chrono::DateTime;
 use crate::log;
 use crate::conf;
 
-pub fn transfer_files(config: &conf::Config, delete: bool) {
+pub fn transfer_files(config: &conf::Config, delete: bool, ext: Option<String>) {
     // Connect to the source FTP server
     let mut ftp_from = match FtpStream::connect((config.ip_address_from.as_str(), config.port_from)) {
         Ok(ftp) => ftp,
@@ -49,7 +49,7 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
     }
 
     // Get the list of files in the source directory
-    let file_list = match ftp_from.nlst(None) {
+    let file_list = match ftp_from.nlst(ext.as_ref().map(String::as_str)) {
         Ok(list) => list,
         Err(e) => {
             log::log(format!("Error getting file list from SOURCE FTP server: {}", e).as_str()).unwrap();
@@ -59,8 +59,7 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
 
     // Transfer each file from the source to the target directory
     for filename in file_list {
-        // too noisy
-        //log::log(format!("Working on file {}", filename).as_str()).unwrap();
+        log::log(format!("Working on file {}", filename).as_str()).unwrap();
         // Get the modified time of the file on the FTP server
         let modified_time_str = match ftp_from.mdtm(filename.as_str()) {
             Ok(time) => {
@@ -74,7 +73,14 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
                 continue;
             }
         };
-        let modified_time = DateTime::parse_from_str(modified_time_str.to_string().as_str(), "%Y%m%d%H%M%S").unwrap().into();
+        let modified_time_replaced_utc = modified_time_str.to_string().replace("UTC","+0000");
+        let modified_time = match DateTime::parse_from_str(modified_time_replaced_utc.as_str(), "%Y-%m-%d %H:%M:%S %z") {
+            Ok(time) => time.into(),
+            Err(err) => {
+                log::log(&format!("Error parsing modified time '{}': {}", modified_time_str, err)).unwrap();
+                continue;
+            }
+        };
 
         // Calculate the age of the file
         let file_age = SystemTime::now().duration_since(modified_time).unwrap().as_secs();
