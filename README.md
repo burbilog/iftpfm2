@@ -87,10 +87,22 @@ You can also use the following options:
 Example
 =======
 
-Here is an example configuration file that transfers all files in the /incoming directory on the FTP server at 192.168.0.1 to the /outgoing directory on the FTP server at 192.168.0.2, if they are at least one day old:
+Here is an example configuration file that transfers all files in the /outgoing directory on the FTP server at 192.168.0.1 to the /incoming directory on the FTP server at 192.168.0.2, if they are at least one day old:
 
 ~~~
-192.168.0.1,21,user1,password1,/incoming,192.168.0.2,21,user2,password2,/outgoing/,86400
+192.168.0.1,21,user1,password1,/outgoing,192.168.0.2,21,user2,password2,/incoming,86400
+~~~
+
+Add this text to config.txt and run iftpfm2 to move \*.xml files using this config file, moving files and deleting them from source server:
+
+~~~
+iftpfm2 -d config.csv
+~~~
+
+Move \*.zip files instead of \*.xml, delete source files and log debug output to file iftpfm2.log:
+
+~~~
+iftpfm2 -d -x ".\*\\.zip" config.csv
 ~~~
 
 Author
