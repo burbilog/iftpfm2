@@ -287,7 +287,8 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
             return;
         },
     };
-    log(format!("Number of files retrieved using pattern: {}", file_list.len()).as_str()).unwrap();
+    let number_of_files = file_list.len();
+    log(format!("Number of files retrieved: {}", file_list.len()).as_str()).unwrap();
     let ext_regex = match ext.as_ref().map(String::as_str) {
         Some(ext) => Regex::new(ext),
         None => {
@@ -298,6 +299,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
     };
     let regex = ext_regex.unwrap();
     // Transfer each file from the source to the target directory
+    let mut successful_transfers = 0;
     for filename in file_list {
         if !regex.is_match(&filename) {
             log(format!("Skipping file {} as it did not match regex {}", filename, regex).as_str()).unwrap();
@@ -353,6 +355,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
                 match ftp_to.put(filename.as_str(), &mut data) {
                     Ok(_) => {
                         log(format!("Successful transfer of file {}", filename).as_str()).unwrap();
+                        successful_transfers += 1;
                     },
                     Err(e) => {
                         log(format!("Error transferring file {} to TARGET FTP server: {}", filename, e).as_str()).unwrap();
@@ -378,6 +381,8 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
             }
         }
     }
+    log(format!("Successfully transferred {} files out of {}",
+        successful_transfers, number_of_files).as_str()).unwrap();
 }
 
 const PROGRAM_NAME: &str = "iftpfm2";
