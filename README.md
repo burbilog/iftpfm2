@@ -58,8 +58,8 @@ To use iftpfm2, you need to create a configuration file that specifies the conne
 ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_to,login_to,password_to,path_to,age
 ~~~
 
-ip_address_from is the IP address of the FTP server to transfer files from.
-port_from is the port number of the FTP server to transfer files from.
+- ip_address_from is the IP address of the FTP server to transfer files from.
+- port_from is the port number of the FTP server to transfer files from.
 login_from is the login name to use to connect to the FTP server to transfer files from.
 password_from is the password to use to connect to the FTP server to transfer files from.
 path_from is the path on the FTP server to transfer files from.
