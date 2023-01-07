@@ -1,9 +1,9 @@
 iftpfm2
 =======
 
-"iftpfm2" is a command-line utility that transfers files between FTP servers based on a configuration file. The name "iftpfm" stands for "Idiotic FTP File Mover," as it was created to solve the problem of transferring large numbers of files between FTP servers using 1C software. 1C lacks the ability to write to temporary files and rename the resulting file, which can lead to the transfer of incomplete files using simple tools like ncftpget/ncftpput.
+"iftpfm2" is a command-line utility that transfers files between FTP servers based on a configuration file. The name "iftpfm" stands for "Idiotic FTP File Mover" because it was created to solve the problem of transferring large numbers of files between multiple FTP servers and directories using 1C software. 1C lacks the ability to write to temporary files and rename the resulting file, which can lead to the transfer of incomplete files using simple tools like ncftpget/ncftpput.
 
-I have no prior knowledge of Rust. This program was written primarily by ChatGPT, who was able to quickly implement the necessary features by following my instructions in plain English. I was surprised at how smoothly the process went, considering it was my first time using ChatGPT.
+I had no prior knowledge of Rust before creating this tool. This program was written primarily by ChatGPT, who was able to quickly implement the necessary features by following my instructions in plain English. I was surprised at how smoothly the process went, considering it was my first time using Rust, thanks to ChatGPT, answering a lot of fucking stupid questions and doing all the heavy lifting for me.
 
 Installation
 ============
