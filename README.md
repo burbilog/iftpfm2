@@ -8,8 +8,6 @@ I had no prior knowledge of Rust before creating this tool. This program was wri
 Installation
 ============
 
-Installation
-
 To install the ifptfm2 program, follow these steps:
 
 1. First, make sure you have Git installed on your system. You can check if Git is already installed by running the following command in your terminal:
