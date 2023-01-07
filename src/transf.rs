@@ -63,7 +63,7 @@ pub fn transfer_files(config: &conf::Config, delete: bool, ext: Option<String>) 
 
     // Transfer each file from the source to the target directory
     for filename in file_list {
-        log::log(format!("Working on file {}", filename).as_str()).unwrap();
+        //log::log(format!("Working on file {}", filename).as_str()).unwrap();
         // Get the modified time of the file on the FTP server
         let modified_time_str = match ftp_from.mdtm(filename.as_str()) {
             Ok(time) => {
@@ -103,7 +103,7 @@ pub fn transfer_files(config: &conf::Config, delete: bool, ext: Option<String>) 
             log::log(format!("Skipping file {}, it is {} seconds old, less than specified age {} seconds", filename, file_age, config.age).as_str()).unwrap();
             continue;
         }
-        log::log(format!("Transferring file {}", filename).as_str()).unwrap();
+        //log::log(format!("Transferring file {}", filename).as_str()).unwrap();
         match ftp_to.rm(filename.as_str()) {
             Ok(_) => log::log(format!("Deleted file {} at TARGET FTP server", filename).as_str()).unwrap(),
             Err(_) => (),
@@ -111,7 +111,9 @@ pub fn transfer_files(config: &conf::Config, delete: bool, ext: Option<String>) 
         match ftp_from.simple_retr(filename.as_str()) {
             Ok(mut data) => {
                 match ftp_to.put(filename.as_str(), &mut data) {
-                    Ok(_) => {},
+                    Ok(_) => {
+                        log::log(format!("Successful transfer of file {}", filename).as_str()).unwrap();
+                    },
                     Err(e) => {
                         log::log(format!("Error transferring file {} to TARGET FTP server: {}", filename, e).as_str()).unwrap();
                         continue;
