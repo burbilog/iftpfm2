@@ -1,9 +1,9 @@
 iftpfm2
 =======
 
-iftpfm2 is a command line program that transfers files from one FTP server to another, based on a configuration file.
+"iftpfm2" is a command-line utility that transfers files between FTP servers based on a configuration file. The name "iftpfm" stands for "Idiotic FTP File Mover," as it was created to solve the problem of transferring large numbers of files between FTP servers using 1C software. 1C lacks the ability to write to temporary files and rename the resulting file, which can lead to the transfer of incomplete files using simple tools like ncftpget/ncftpput.
 
-This program is written largely by ChatGPT. I don't know Rust at all. Almost everything is the result of asking ChatGPT to implement required features.
+I have no prior knowledge of Rust. This program was written primarily by ChatGPT, who was able to quickly implement the necessary features by following my instructions in plain English. I was surprised at how smoothly the process went, considering it was my first time using ChatGPT.
 
 Installation
 ============
@@ -77,6 +77,11 @@ Here is an example configuration file that transfers all files in the /incoming 
 ~~~
 192.168.0.1,21,user1,password1,/incoming/*,192.168.0.2,21,user2,password2,/outgoing/,86400
 ~~~
+
+Author
+======
+
+    ChatGPT
 
 License
 =======

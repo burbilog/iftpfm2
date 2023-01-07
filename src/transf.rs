@@ -61,9 +61,9 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
 
     // Transfer each file from the source to the target directory
     for filename in file_list {
-        log::log(format!("Working on file {}", filename).as_str()).unwrap();
+        // too noisy
+        //log::log(format!("Working on file {}", filename).as_str()).unwrap();
         // Get the modified time of the file on the FTP server
-        //let modified_time_str = ftp_from.mdtm(filename.as_str()).unwrap().unwrap();
         let modified_time_str = match ftp_from.mdtm(filename.as_str()) {
             Ok(time) => {
                 // too noisy
@@ -71,7 +71,8 @@ pub fn transfer_files(config: &conf::Config, delete: bool) {
                 time.unwrap()
             },
             Err(e) => {
-                log::log(&format!("Error getting modified time for file(?) '{}': {}, skipping", filename, e)).unwrap();
+                //log::log(&format!("Error getting modified time for file(?) '{}': '{}', skipping", filename, e)).unwrap();
+                log::log(&format!("Error getting modified time, skipping file(?) '{}': {}", filename, e.to_string().replace("\n", ""))).unwrap();
                 continue;
             }
         };
