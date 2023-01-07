@@ -72,7 +72,9 @@ ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_
 
 Once you have created the configuration file, you can run iftpfm2 with the following command:
 
+~~~
 iftpfm2 config_file
+~~~
 
 You can also use the following options:
 
