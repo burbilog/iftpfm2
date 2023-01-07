@@ -3,7 +3,7 @@ use std::process;
 
 fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-l logfile] config_file",
+        "Usage: {} [-h] [-v] [-d] [-x \"*.xml\"] [-l logfile] config_file",
         super::PROGRAM_NAME
     );
 }

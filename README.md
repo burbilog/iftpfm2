@@ -70,6 +70,7 @@ You can also use the following options:
     -v: Print version information and exit.
     -d: Delete the source files after transferring them.
     -l logfile: Write log information to the specified log file.
+    -x pattern: Specify extension or other pattern. Only files, matching this pattern will be transferred. By default "*.xml" pattern is used.
 
 Example
 =======
