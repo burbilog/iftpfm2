@@ -99,10 +99,10 @@ Add this text to config.txt and run iftpfm2 to move \*.xml files using this conf
 iftpfm2 -d config.csv
 ~~~
 
-Move \*.zip files instead of \*.xml, delete source files and log debug output to file iftpfm2.log:
+Move \*.zip files instead of \*.xml, delete source files and log debug output to file /tmp/iftpfm2.log:
 
 ~~~
-iftpfm2 -d -x ".*\.zip" config.csv
+iftpfm2 -d -x ".*\.zip" -l /tmp/iftpfm2.log config.csv
 ~~~
 
 Author
