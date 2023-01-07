@@ -102,7 +102,7 @@ iftpfm2 -d config.csv
 Move \*.zip files instead of \*.xml, delete source files and log debug output to file iftpfm2.log:
 
 ~~~
-iftpfm2 -d -x ".\*\\.zip" config.csv
+iftpfm2 -d -x ".*\.zip" config.csv
 ~~~
 
 Author
