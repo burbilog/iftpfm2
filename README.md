@@ -60,15 +60,15 @@ ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_
 
 - ip_address_from is the IP address of the FTP server to transfer files from.
 - port_from is the port number of the FTP server to transfer files from.
-login_from is the login name to use to connect to the FTP server to transfer files from.
-password_from is the password to use to connect to the FTP server to transfer files from.
-path_from is the path on the FTP server to transfer files from.
-ip_address_to is the IP address of the FTP server to transfer files to.
-port_to is the port number of the FTP server to transfer files to.
-login_to is the login name to use to connect to the FTP server to transfer files to.
-password_to is the password to use to connect to the FTP server to transfer files to.
-path_to is the path on the FTP server to transfer files to.
-age is the minimum age of the files to be transferred, in seconds.
+- login_from is the login name to use to connect to the FTP server to transfer files from.
+- password_from is the password to use to connect to the FTP server to transfer files from.
+- path_from is the path on the FTP server to transfer files from.
+- ip_address_to is the IP address of the FTP server to transfer files to.
+- port_to is the port number of the FTP server to transfer files to.
+- login_to is the login name to use to connect to the FTP server to transfer files to.
+- password_to is the password to use to connect to the FTP server to transfer files to.
+- path_to is the path on the FTP server to transfer files to.
+- age is the minimum age of the files to be transferred, in seconds.
 
 Once you have created the configuration file, you can run iftpfm2 with the following command:
 
