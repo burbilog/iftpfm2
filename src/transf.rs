@@ -6,6 +6,9 @@ use crate::log;
 use crate::conf;
 
 pub fn transfer_files(config: &conf::Config, delete: bool, ext: Option<String>) {
+    log::log(format!("Transferring files from ftp://{}:{}{} to ftp://{}:{}{}",
+        config.ip_address_from, config.port_from, config.path_from,
+        config.ip_address_to, config.port_to, config.path_to).as_str()).unwrap();
     // Connect to the source FTP server
     let mut ftp_from = match FtpStream::connect((config.ip_address_from.as_str(), config.port_from)) {
         Ok(ftp) => ftp,
@@ -56,6 +59,7 @@ pub fn transfer_files(config: &conf::Config, delete: bool, ext: Option<String>) 
             return;
         },
     };
+    log::log(format!("Number of files retrieved using pattern '{:?}': {}", ext, file_list.len()).as_str()).unwrap();
 
     // Transfer each file from the source to the target directory
     for filename in file_list {
@@ -82,8 +86,17 @@ pub fn transfer_files(config: &conf::Config, delete: bool, ext: Option<String>) 
             }
         };
 
+        //log::log(format!("modified_time: {:?}", modified_time).as_str()).unwrap();
+        //log::log(format!("system time: {:?}", SystemTime::now()).as_str()).unwrap();
+
         // Calculate the age of the file
-        let file_age = SystemTime::now().duration_since(modified_time).unwrap().as_secs();
+        let file_age = match SystemTime::now().duration_since(modified_time) {
+            Ok(duration) => duration.as_secs(),
+            Err(_) => {
+                log::log(&format!("Error calculating age for file '{}', skipping", filename)).unwrap();
+                continue;
+            }
+        };
 
         // Skip the file if it is younger than the specified age
         if file_age < (config.age as u64) {
