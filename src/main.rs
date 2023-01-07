@@ -232,7 +232,7 @@ fn test_log_to_file() {
 }
 
 
-pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
+pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32 {
     log(format!("Transferring files from ftp://{}:{}{} to ftp://{}:{}{}",
         config.ip_address_from, config.port_from, config.path_from,
         config.ip_address_to, config.port_to, config.path_to).as_str()).unwrap();
@@ -241,7 +241,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
         Ok(ftp) => ftp,
         Err(e) => {
             log(format!("Error connecting to SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
-            return;
+            return 0;
         },
     };
     ftp_from.login(config.login_from.as_str(), config.password_from.as_str())
@@ -253,7 +253,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
         Ok(_) => (),
         Err(e) => {
             log(format!("Error changing directory on SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
-            return;
+            return 0;
         },
     }
 
@@ -262,7 +262,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
         Ok(ftp) => ftp,
         Err(e) => {
             log(format!("Error connecting to TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
-            return;
+            return 0;
         },
     };
     ftp_to.login(config.login_to.as_str(), config.password_to.as_str())
@@ -274,7 +274,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
         Ok(_) => (),
         Err(e) => {
             log(format!("Error changing directory on TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
-            return;
+            return 0;
         },
     }
 
@@ -284,17 +284,17 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
         Ok(list) => list,
         Err(e) => {
             log(format!("Error getting file list from SOURCE FTP server: {}", e).as_str()).unwrap();
-            return;
+            return 0;
         },
     };
     let number_of_files = file_list.len();
-    log(format!("Number of files retrieved: {}", file_list.len()).as_str()).unwrap();
+    log(format!("Number of files retrieved from SOURCE FTP server: {}", file_list.len()).as_str()).unwrap();
     let ext_regex = match ext.as_ref().map(String::as_str) {
         Some(ext) => Regex::new(ext),
         None => {
             // Handle the case where `ext` is None
             log(&format!("FUCK")).unwrap();
-            return;
+            return 0;
         }
     };
     let regex = ext_regex.unwrap();
@@ -383,6 +383,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) {
     }
     log(format!("Successfully transferred {} files out of {}",
         successful_transfers, number_of_files).as_str()).unwrap();
+    successful_transfers
 }
 
 const PROGRAM_NAME: &str = "iftpfm2";
@@ -401,12 +402,15 @@ fn main() {
     let config_file = config_file.unwrap();
     let configs = parse_config(&config_file).unwrap();
 
+    let mut total_transfers = 0;
+
     // Loop over each line in config file
     for cf in configs {
-        transfer_files(&cf, delete, ext.clone());
+        total_transfers = total_transfers + transfer_files(&cf, delete, ext.clone());
     }
 
-    log(format!("{} version {} finished", PROGRAM_NAME, PROGRAM_VERSION).as_str()).unwrap();
+    log(format!("{} version {} finished, successfully transferred {} file(s)", 
+        PROGRAM_NAME, PROGRAM_VERSION, total_transfers).as_str()).unwrap();
 }
 
 
