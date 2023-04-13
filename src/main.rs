@@ -1,17 +1,16 @@
-use std::env;
-use std::process;
-use std::fs::File;
-use std::io::{BufReader, BufRead, Error, ErrorKind};
-use std::str::FromStr;
-use std::fs::{OpenOptions};
-use std::io::{self, Write};
-use std::path::Path;
-use chrono::{Local};
-use ftp::FtpStream;
-use std::time::SystemTime;
 use chrono::DateTime;
+use chrono::Local;
+use ftp::FtpStream;
 use regex::Regex;
-
+use std::env;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::{self, Write};
+use std::io::{BufRead, BufReader, Error, ErrorKind};
+use std::path::Path;
+use std::process;
+use std::str::FromStr;
+use std::time::SystemTime;
 
 fn print_usage() {
     println!(
@@ -25,7 +24,6 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
     let mut delete = false;
     let mut config_file = None;
     let mut ext = None;
-
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -62,7 +60,6 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
     (delete, log_file, config_file, ext)
 }
 
-
 #[derive(Debug, PartialEq)]
 pub struct Config {
     pub ip_address_from: String,
@@ -90,17 +87,78 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
         }
 
         let mut fields = line.split(',');
-        let ip_address_from = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: ip_address_from"))?.to_string();
-        let port_from = u16::from_str(fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: port_from"))?).map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
-        let login_from = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: login_from"))?.to_string();
-        let password_from = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: password_from"))?.to_string();
-        let path_from = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: path_from"))?.to_string();
-        let ip_address_to = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: ip_address_to"))?.to_string();
-        let port_to = u16::from_str(fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: port_to"))?).map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
-        let login_to = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: login_to"))?.to_string();
-        let password_to = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: password_to"))?.to_string();
-        let path_to = fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: path_to"))?.to_string();
-        let age = u64::from_str(fields.next().ok_or(Error::new(ErrorKind::InvalidInput, "missing field: age"))?).map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
+        let ip_address_from = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: ip_address_from",
+            ))?
+            .to_string();
+        let port_from = u16::from_str(fields.next().ok_or(Error::new(
+            ErrorKind::InvalidInput,
+            "missing field: port_from",
+        ))?)
+        .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
+        let login_from = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: login_from",
+            ))?
+            .to_string();
+        let password_from = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: password_from",
+            ))?
+            .to_string();
+        let path_from = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: path_from",
+            ))?
+            .to_string();
+        let ip_address_to = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: ip_address_to",
+            ))?
+            .to_string();
+        let port_to = u16::from_str(fields.next().ok_or(Error::new(
+            ErrorKind::InvalidInput,
+            "missing field: port_to",
+        ))?)
+        .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
+        let login_to = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: login_to",
+            ))?
+            .to_string();
+        let password_to = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: password_to",
+            ))?
+            .to_string();
+        let path_to = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: path_to",
+            ))?
+            .to_string();
+        let age = u64::from_str(
+            fields
+                .next()
+                .ok_or(Error::new(ErrorKind::InvalidInput, "missing field: age"))?,
+        )
+        .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
 
         configs.push(Config {
             ip_address_from,
@@ -122,11 +180,11 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
 
 #[cfg(test)]
 mod tests {
+    use super::Config;
     use std::fs::File;
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::tempdir;
-    use super::Config;
 
     #[test]
     fn test_parse_config() {
@@ -177,7 +235,6 @@ mod tests {
 // If the global `LOG_FILE` static variable is set, the message is appended to the specified file.
 // If `LOG_FILE` is not set, the message is printed to stdout.
 
-
 pub static mut LOG_FILE: Option<String> = None;
 
 // Logs the given message to the file specified by the global `LOG_FILE` static variable.
@@ -189,7 +246,10 @@ pub fn log(message: &str) -> io::Result<()> {
     unsafe {
         match &LOG_FILE {
             Some(log_file) => {
-                let mut file = OpenOptions::new().create(true).append(true).open(log_file)?;
+                let mut file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(log_file)?;
                 file.write_all(log_message.as_bytes())?;
             }
             None => {
@@ -211,9 +271,9 @@ pub fn set_log_file<P: AsRef<Path>>(path: P) {
 }
 
 #[cfg(test)]
-use tempfile::tempdir;
-#[cfg(test)]
 use std::fs::remove_file;
+#[cfg(test)]
+use tempfile::tempdir;
 
 #[test]
 fn test_log_to_file() {
@@ -231,51 +291,91 @@ fn test_log_to_file() {
     remove_file(log_file).unwrap();
 }
 
-
 pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32 {
-    log(format!("Transferring files from ftp://{}:{}{} to ftp://{}:{}{}",
-        config.ip_address_from, config.port_from, config.path_from,
-        config.ip_address_to, config.port_to, config.path_to).as_str()).unwrap();
+    log(format!(
+        "Transferring files from ftp://{}:{}{} to ftp://{}:{}{}",
+        config.ip_address_from,
+        config.port_from,
+        config.path_from,
+        config.ip_address_to,
+        config.port_to,
+        config.path_to
+    )
+    .as_str())
+    .unwrap();
     // Connect to the source FTP server
-    let mut ftp_from = match FtpStream::connect((config.ip_address_from.as_str(), config.port_from)) {
+    let mut ftp_from = match FtpStream::connect((config.ip_address_from.as_str(), config.port_from))
+    {
         Ok(ftp) => ftp,
         Err(e) => {
-            log(format!("Error connecting to SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
+            log(format!(
+                "Error connecting to SOURCE FTP server {}: {}",
+                config.ip_address_from, e
+            )
+            .as_str())
+            .unwrap();
             return 0;
-        },
+        }
     };
-    ftp_from.login(config.login_from.as_str(), config.password_from.as_str())
+    ftp_from
+        .login(config.login_from.as_str(), config.password_from.as_str())
         .unwrap_or_else(|e| {
-            log(format!("Error logging into SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
+            log(format!(
+                "Error logging into SOURCE FTP server {}: {}",
+                config.ip_address_from, e
+            )
+            .as_str())
+            .unwrap();
             return;
         });
     match ftp_from.cwd(config.path_from.as_str()) {
         Ok(_) => (),
         Err(e) => {
-            log(format!("Error changing directory on SOURCE FTP server {}: {}", config.ip_address_from, e).as_str()).unwrap();
+            log(format!(
+                "Error changing directory on SOURCE FTP server {}: {}",
+                config.ip_address_from, e
+            )
+            .as_str())
+            .unwrap();
             return 0;
-        },
+        }
     }
 
     // Connect to the target FTP server
     let mut ftp_to = match FtpStream::connect((config.ip_address_to.as_str(), config.port_to)) {
         Ok(ftp) => ftp,
         Err(e) => {
-            log(format!("Error connecting to TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
+            log(format!(
+                "Error connecting to TARGET FTP server {}: {}",
+                config.ip_address_to, e
+            )
+            .as_str())
+            .unwrap();
             return 0;
-        },
+        }
     };
-    ftp_to.login(config.login_to.as_str(), config.password_to.as_str())
+    ftp_to
+        .login(config.login_to.as_str(), config.password_to.as_str())
         .unwrap_or_else(|e| {
-            log(format!("Error logging into TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
+            log(format!(
+                "Error logging into TARGET FTP server {}: {}",
+                config.ip_address_to, e
+            )
+            .as_str())
+            .unwrap();
             return;
         });
     match ftp_to.cwd(config.path_to.as_str()) {
         Ok(_) => (),
         Err(e) => {
-            log(format!("Error changing directory on TARGET FTP server {}: {}", config.ip_address_to, e).as_str()).unwrap();
+            log(format!(
+                "Error changing directory on TARGET FTP server {}: {}",
+                config.ip_address_to, e
+            )
+            .as_str())
+            .unwrap();
             return 0;
-        },
+        }
     }
 
     // Get the list of files in the source directory
@@ -285,10 +385,15 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
         Err(e) => {
             log(format!("Error getting file list from SOURCE FTP server: {}", e).as_str()).unwrap();
             return 0;
-        },
+        }
     };
     let number_of_files = file_list.len();
-    log(format!("Number of files retrieved from SOURCE FTP server: {}", file_list.len()).as_str()).unwrap();
+    log(format!(
+        "Number of files retrieved from SOURCE FTP server: {}",
+        file_list.len()
+    )
+    .as_str())
+    .unwrap();
     let ext_regex = match ext.as_ref().map(String::as_str) {
         Some(ext) => Regex::new(ext),
         None => {
@@ -302,7 +407,12 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
     let mut successful_transfers = 0;
     for filename in file_list {
         if !regex.is_match(&filename) {
-            log(format!("Skipping file {} as it did not match regex {}", filename, regex).as_str()).unwrap();
+            log(format!(
+                "Skipping file {} as it did not match regex {}",
+                filename, regex
+            )
+            .as_str())
+            .unwrap();
             continue;
         }
         //log(format!("Working on file {}", filename).as_str()).unwrap();
@@ -312,18 +422,30 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
                 // too noisy
                 //log(&format!("Successfully retrieved modified time '{}' for file '{}'", time.unwrap(), filename)).unwrap();
                 time.unwrap()
-            },
+            }
             Err(e) => {
                 //log(&format!("Error getting modified time for file(?) '{}': '{}', skipping", filename, e)).unwrap();
-                log(&format!("Error getting modified time, skipping file(?) '{}': {}", filename, e.to_string().replace("\n", ""))).unwrap();
+                log(&format!(
+                    "Error getting modified time, skipping file(?) '{}': {}",
+                    filename,
+                    e.to_string().replace("\n", "")
+                ))
+                .unwrap();
                 continue;
             }
         };
-        let modified_time_replaced_utc = modified_time_str.to_string().replace("UTC","+0000");
-        let modified_time = match DateTime::parse_from_str(modified_time_replaced_utc.as_str(), "%Y-%m-%d %H:%M:%S %z") {
+        let modified_time_replaced_utc = modified_time_str.to_string().replace("UTC", "+0000");
+        let modified_time = match DateTime::parse_from_str(
+            modified_time_replaced_utc.as_str(),
+            "%Y-%m-%d %H:%M:%S %z",
+        ) {
             Ok(time) => time.into(),
             Err(err) => {
-                log(&format!("Error parsing modified time '{}': {}", modified_time_str, err)).unwrap();
+                log(&format!(
+                    "Error parsing modified time '{}': {}",
+                    modified_time_str, err
+                ))
+                .unwrap();
                 continue;
             }
         };
@@ -335,36 +457,55 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
         let file_age = match SystemTime::now().duration_since(modified_time) {
             Ok(duration) => duration.as_secs(),
             Err(_) => {
-                log(&format!("Error calculating age for file '{}', skipping", filename)).unwrap();
+                log(&format!(
+                    "Error calculating age for file '{}', skipping",
+                    filename
+                ))
+                .unwrap();
                 continue;
             }
         };
 
         // Skip the file if it is younger than the specified age
         if file_age < (config.age as u64) {
-            log(format!("Skipping file {}, it is {} seconds old, less than specified age {} seconds", filename, file_age, config.age).as_str()).unwrap();
+            log(format!(
+                "Skipping file {}, it is {} seconds old, less than specified age {} seconds",
+                filename, file_age, config.age
+            )
+            .as_str())
+            .unwrap();
             continue;
         }
         //log(format!("Transferring file {}", filename).as_str()).unwrap();
         match ftp_to.rm(filename.as_str()) {
-            Ok(_) => log(format!("Deleted file {} at TARGET FTP server", filename).as_str()).unwrap(),
+            Ok(_) => {
+                log(format!("Deleted file {} at TARGET FTP server", filename).as_str()).unwrap()
+            }
             Err(_) => (),
         };
         match ftp_from.simple_retr(filename.as_str()) {
-            Ok(mut data) => {
-                match ftp_to.put(filename.as_str(), &mut data) {
-                    Ok(_) => {
-                        log(format!("Successful transfer of file {}", filename).as_str()).unwrap();
-                        successful_transfers += 1;
-                    },
-                    Err(e) => {
-                        log(format!("Error transferring file {} to TARGET FTP server: {}", filename, e).as_str()).unwrap();
-                        continue;
-                    }
+            Ok(mut data) => match ftp_to.put(filename.as_str(), &mut data) {
+                Ok(_) => {
+                    log(format!("Successful transfer of file {}", filename).as_str()).unwrap();
+                    successful_transfers += 1;
+                }
+                Err(e) => {
+                    log(format!(
+                        "Error transferring file {} to TARGET FTP server: {}",
+                        filename, e
+                    )
+                    .as_str())
+                    .unwrap();
+                    continue;
                 }
             },
             Err(e) => {
-                log(format!("Error transferring file {} from SOURCE FTP server: {}", filename, e).as_str()).unwrap();
+                log(format!(
+                    "Error transferring file {} from SOURCE FTP server: {}",
+                    filename, e
+                )
+                .as_str())
+                .unwrap();
                 continue;
             }
         }
@@ -374,15 +515,20 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
             match ftp_from.rm(filename.as_str()) {
                 Ok(_) => {
                     log(format!("Deleted SOURCE file {}", filename).as_str()).unwrap();
-                },
+                }
                 Err(e) => {
-                    log(format!("Error deleting SOURCE file {}: {}", filename, e).as_str()).unwrap();
+                    log(format!("Error deleting SOURCE file {}: {}", filename, e).as_str())
+                        .unwrap();
                 }
             }
         }
     }
-    log(format!("Successfully transferred {} files out of {}",
-        successful_transfers, number_of_files).as_str()).unwrap();
+    log(format!(
+        "Successfully transferred {} files out of {}",
+        successful_transfers, number_of_files
+    )
+    .as_str())
+    .unwrap();
     successful_transfers
 }
 
@@ -393,7 +539,7 @@ fn main() {
     // Parse arguments and setup logging
     let (delete, log_file, config_file, ext) = parse_args();
     if let Some(log_file) = log_file {
-            set_log_file(log_file);
+        set_log_file(log_file);
     }
 
     log(format!("{} version {} started", PROGRAM_NAME, PROGRAM_VERSION).as_str()).unwrap();
@@ -409,8 +555,10 @@ fn main() {
         total_transfers = total_transfers + transfer_files(&cf, delete, ext.clone());
     }
 
-    log(format!("{} version {} finished, successfully transferred {} file(s)", 
-        PROGRAM_NAME, PROGRAM_VERSION, total_transfers).as_str()).unwrap();
+    log(format!(
+        "{} version {} finished, successfully transferred {} file(s)",
+        PROGRAM_NAME, PROGRAM_VERSION, total_transfers
+    )
+    .as_str())
+    .unwrap();
 }
-
-
