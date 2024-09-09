@@ -483,6 +483,28 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
             }
             Err(_) => (),
         };
+
+        // Set binary mode for both FTP connections
+        if let Err(e) = ftp_from.transfer_type(ftp::types::FileType::Binary) {
+            log(format!(
+                "Error setting binary mode on SOURCE FTP server: {}",
+                e
+            )
+            .as_str())
+            .unwrap();
+            continue;
+        }
+
+        if let Err(e) = ftp_to.transfer_type(ftp::types::FileType::Binary) {
+            log(format!(
+                "Error setting binary mode on TARGET FTP server: {}",
+                e
+            )
+            .as_str())
+            .unwrap();
+            continue;
+        }
+
         match ftp_from.simple_retr(filename.as_str()) {
             Ok(mut data) => match ftp_to.put(filename.as_str(), &mut data) {
                 Ok(_) => {
@@ -533,7 +555,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
 }
 
 const PROGRAM_NAME: &str = "iftpfm2";
-const PROGRAM_VERSION: &str = "2.0.0";
+const PROGRAM_VERSION: &str = "2.0.1";
 
 fn main() {
     // Parse arguments and setup logging
