@@ -11,6 +11,8 @@ use std::path::Path;
 use std::process;
 use std::str::FromStr;
 use std::time::SystemTime;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 
 fn print_usage() {
     println!(
@@ -229,45 +231,60 @@ mod tests {
         assert_eq!(configs, expected);
     }
 }
+// LOG_FILE is a thread-safe, lazily initialized global variable
+// It holds an Option<String> representing the path to the log file (if set)
+// The Mutex ensures thread-safe access to this value
+static LOG_FILE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
-// Logs a message to a file or stdout.
-//
-// If the global `LOG_FILE` static variable is set, the message is appended to the specified file.
-// If `LOG_FILE` is not set, the message is printed to stdout.
-
-pub static mut LOG_FILE: Option<String> = None;
-
-// Logs the given message to the file specified by the global `LOG_FILE` static variable.
-// If `LOG_FILE` is not set, logs the message to stdout.
+/// Logs a message to either a file or stdout
+///
+/// This function takes a message as input and logs it with a timestamp.
+/// If a log file has been set (using set_log_file), the message is appended to that file.
+/// Otherwise, the message is printed to stdout.
+///
+/// # Arguments
+///
+/// * `message` - The message to be logged
+///
+/// # Returns
+///
+/// * `io::Result<()>` - Ok if the logging was successful, Err otherwise
 pub fn log(message: &str) -> io::Result<()> {
+    // Generate a timestamp for the log message
     let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let log_message = format!("{} {}\n", timestamp, message);
 
-    unsafe {
-        match &LOG_FILE {
-            Some(log_file) => {
-                let mut file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(log_file)?;
-                file.write_all(log_message.as_bytes())?;
-            }
-            None => {
-                println!("{}", log_message);
-            }
+    // Lock the mutex and check if a log file has been set
+    match &*LOG_FILE.lock().unwrap() {
+        Some(log_file) => {
+            // If a log file is set, append the message to the file
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_file)?;
+            file.write_all(log_message.as_bytes())?;
+        }
+        None => {
+            // If no log file is set, print the message to stdout
+            println!("{}", log_message);
         }
     }
 
     Ok(())
 }
 
-// Sets the global `LOG_FILE` static variable to the specified file path.
-// set_log_file("/path/to/log/file");
+/// Sets the path for the log file
+///
+/// This function updates the global LOG_FILE variable with the provided path.
+/// Subsequent calls to the log function will write to this file.
+///
+/// # Arguments
+///
+/// * `path` - A path-like object representing the location of the log file
 pub fn set_log_file<P: AsRef<Path>>(path: P) {
+    // Convert the path to a string and update the LOG_FILE
     let path = path.as_ref().to_str().unwrap();
-    unsafe {
-        LOG_FILE = Some(path.to_string());
-    }
+    *LOG_FILE.lock().unwrap() = Some(path.to_string());
 }
 
 #[cfg(test)]
@@ -555,7 +572,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
 }
 
 const PROGRAM_NAME: &str = "iftpfm2";
-const PROGRAM_VERSION: &str = "2.0.1";
+const PROGRAM_VERSION: &str = "2.0.2";
 
 fn main() {
     // Parse arguments and setup logging
