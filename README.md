@@ -55,21 +55,22 @@ To use iftpfm2, you need to create a configuration file that specifies the conne
 
 ~~~
 # This is a comment
-ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_to,login_to,password_to,path_to,min_age_secs
+hostfrom,portfrom,userfrom,passfrom,pathfrom,hostto,portto,userto,passto,pathto,age_seconds,filename_regexp
 ~~~
 
 Where:
-- `ip_address_from`: Source FTP server hostname/IP (string)
-- `port_from`: Source FTP port (number, typically 21)
-- `login_from`: Source FTP username (string)
-- `password_from`: Source FTP password (string)  
-- `path_from`: Source directory path (must be literal path, no wildcards)
-- `ip_address_to`: Destination FTP server hostname/IP (string)
-- `port_to`: Destination FTP port (number, typically 21)
-- `login_to`: Destination FTP username (string)
-- `password_to`: Destination FTP password (string)
-- `path_to`: Destination directory path (string)
-- `min_age_secs`: Minimum file age to transfer (seconds, number)
+- `hostfrom`: Source FTP server hostname/IP (string)
+- `portfrom`: Source FTP port (number, typically 21)
+- `userfrom`: Source FTP username (string)
+- `passfrom`: Source FTP password (string)  
+- `pathfrom`: Source directory path (must be literal path, no wildcards)
+- `hostto`: Destination FTP server hostname/IP (string)
+- `portto`: Destination FTP port (number, typically 21)
+- `userto`: Destination FTP username (string)
+- `passto`: Destination FTP password (string)
+- `pathto`: Destination directory path (string)
+- `age_seconds`: Minimum file age to transfer (seconds, number)
+- `filename_regexp`: Regular expression pattern to match files (string)
 
 Example:
 ```
@@ -80,7 +81,7 @@ File filtering behavior:
 - All files in the literal source path are retrieved via FTP NLST command
 - Files are then filtered by:
   - Minimum age (specified in config file)
-  - Regular expression pattern (via -x command line option, default matches .xml files)
+  - Regular expression pattern (specified per server in config file)
 
 Once you have created the configuration file, you can run iftpfm2 with the following command:
 
@@ -94,7 +95,6 @@ You can also use the following options:
     -v: Print version information and exit.
     -d: Delete the source files after transferring them.
     -l logfile: Write log information to the specified log file.
-    -x pattern: Specify file matching pattern, defined by regular expression. Only files matching this pattern will be transferred. By default ".*\.xml" pattern is used.
     -p number: Set number of parallel threads to use (default: 1)
     -r: Randomize processing order of configuration entries
 
