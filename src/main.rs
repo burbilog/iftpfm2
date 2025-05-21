@@ -619,7 +619,6 @@ fn cleanup_lock_file() {
 fn main() {
     // Check for single instance
     if let Err(e) = check_single_instance() {
-        eprintln!("Error: {}", e);  // Still print to stderr for immediate visibility
         log(&format!("Error: {}", e)).unwrap();
         process::exit(1);
     }
