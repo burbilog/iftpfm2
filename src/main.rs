@@ -590,8 +590,6 @@ fn main() {
     let config_file = config_file.unwrap();
     let configs = parse_config(&config_file).unwrap();
 
-    let mut total_transfers = 0;
-
     // Create thread pool with specified parallelism
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(parallel.max(1)) // Ensure at least 1 thread
