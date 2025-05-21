@@ -130,7 +130,7 @@ Keep in mind that the file pattern is a regular expression, not a standard shell
 Author
 ======
 
-    ChatGPT
+    ChatGPT/Sonnet/DeepSeek/etc
 
 License
 =======
