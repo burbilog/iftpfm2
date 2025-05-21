@@ -440,7 +440,7 @@ fn test_log_to_file() {
 ///
 /// # Example
 /// ```
-/// let count = transfer_files(&config, true, Some(".*\.xml".into()), 1);
+/// let count = transfer_files(&config, true, Some(".*\\.xml".into()), 1);
 /// ```
 pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread_id: usize) -> i32 {
     // Check for shutdown request before starting
