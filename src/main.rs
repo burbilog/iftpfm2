@@ -599,8 +599,9 @@ const PROGRAM_VERSION: &str = "2.0.2";
 
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::Command;
+use std::fs::File;
 use std::io::Read;
-use std::time::Duration;
 
 // Global flag to indicate if shutdown was requested
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -615,57 +616,86 @@ fn request_shutdown() {
     SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
 }
 
+// Find and kill process that has the socket open
+fn kill_process_with_socket(socket_path: &str) -> io::Result<()> {
+    // Use lsof to find process using the socket
+    let output = Command::new("lsof")
+        .arg("-t")  // Output only PID
+        .arg(socket_path)
+        .output()?;
+    
+    if !output.status.success() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Failed to find process using lsof"
+        ));
+    }
+    
+    let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if pid_str.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "No process found using the socket"
+        ));
+    }
+    
+    log(&format!("Found old instance with PID {}, terminating it", pid_str)).unwrap();
+    
+    // Kill the process
+    let kill_output = Command::new("kill")
+        .arg("-9")  // SIGKILL for immediate termination
+        .arg(&pid_str)
+        .output()?;
+    
+    if !kill_output.status.success() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to kill process {}", pid_str)
+        ));
+    }
+    
+    log(&format!("Successfully terminated old instance with PID {}", pid_str)).unwrap();
+    
+    // Give the system a moment to release resources
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    
+    Ok(())
+}
+
 fn check_single_instance() -> io::Result<()> {
     let socket_path = format!("/tmp/{}.sock", PROGRAM_NAME);
     
-    // Try to connect to existing socket to signal shutdown
-    if let Ok(mut stream) = UnixStream::connect(&socket_path) {
-        log("Another instance is running, sending shutdown signal").unwrap();
+    // Try to connect to existing socket
+    if UnixStream::connect(&socket_path).is_ok() {
+        log("Another instance is running, forcibly terminating it").unwrap();
         
-        // Send shutdown command
-        let _ = stream.write_all(b"SHUTDOWN");
-        
-        // Wait for up to 5 seconds for the socket to disappear
-        for _ in 0..50 {
-            std::thread::sleep(Duration::from_millis(100));
-            if UnixStream::connect(&socket_path).is_err() {
-                log("Previous instance has shut down, continuing with new instance").unwrap();
-                break;
-            }
+        // Try to kill the process that has the socket open
+        if let Err(e) = kill_process_with_socket(&socket_path) {
+            log(&format!("Failed to kill old process: {}", e)).unwrap();
         }
         
-        // If socket still exists, forcibly remove it
-        if UnixStream::connect(&socket_path).is_ok() {
-            log("Existing instance did not shut down in time, forcing removal of socket").unwrap();
-            let _ = std::fs::remove_file(&socket_path);
-        }
+        // Clean up the socket file regardless
+        let _ = std::fs::remove_file(&socket_path);
     } else {
         // Clean up any stale socket file
         let _ = std::fs::remove_file(&socket_path);
     }
     
-    // Create new listener
+    // Create a new socket file with our PID
     let listener = UnixListener::bind(&socket_path)?;
     
-    // Spawn a thread to listen for shutdown signals
+    // Write our PID to the socket for future reference
+    let pid = std::process::id().to_string();
+    let mut pid_file = File::create(format!("/tmp/{}.pid", PROGRAM_NAME))?;
+    pid_file.write_all(pid.as_bytes())?;
+    
+    // Spawn a thread to keep the socket alive
     std::thread::spawn(move || {
         for stream in listener.incoming() {
-            if let Ok(mut stream) = stream {
-                let mut buffer = [0; 8];
-                if let Ok(size) = stream.read(&mut buffer) {
-                    if size >= 8 && &buffer[0..8] == b"SHUTDOWN" {
-                        log("Received shutdown signal from new instance").unwrap();
-                        request_shutdown();
-                        
-                        // Close the listener socket to allow new instance to bind
-                        break;
-                    }
-                }
+            if let Ok(_) = stream {
+                // Just keep the socket open
             }
         }
-        
-        // Clean up socket when thread exits
-        let _ = std::fs::remove_file(&socket_path);
     });
 
     Ok(())
@@ -673,7 +703,9 @@ fn check_single_instance() -> io::Result<()> {
 
 fn cleanup_lock_file() {
     let socket_path = format!("/tmp/{}.sock", PROGRAM_NAME);
+    let pid_path = format!("/tmp/{}.pid", PROGRAM_NAME);
     let _ = std::fs::remove_file(socket_path);
+    let _ = std::fs::remove_file(pid_path);
 }
 
 fn main() {
