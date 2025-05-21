@@ -290,6 +290,7 @@ mod tests {
                 password_to: "password2".to_string(),
                 path_to: "/path/to/files2".to_string(),
                 age: 30,
+                filename_regexp: ".*".to_string(),
             },
             Config {
                 ip_address_from: "192.168.0.3".to_string(),
@@ -303,6 +304,7 @@ mod tests {
                 password_to: "password4".to_string(),
                 path_to: "/path/to/files4".to_string(),
                 age: 60,
+                filename_regexp: ".*".to_string(),
             },
         ];
 
