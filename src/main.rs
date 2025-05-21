@@ -126,6 +126,8 @@ pub struct Config {
     pub path_to: String,
     /// Minimum file age to transfer (seconds)
     pub age: u64,
+    /// Regular expression pattern for filename matching
+    pub filename_regexp: String,
 }
 
 /// Parses configuration file into a vector of Config structs
@@ -252,15 +254,15 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
         })?;
 
         configs.push(Config {
-            host_from,
+            ip_address_from: host_from,
             port_from,
-            user_from,
-            pass_from,
+            login_from: user_from,
+            password_from: pass_from,
             path_from,
-            host_to,
+            ip_address_to: host_to,
             port_to,
-            user_to,
-            pass_to,
+            login_to: user_to,
+            password_to: pass_to,
             path_to,
             age,
             filename_regexp,
@@ -459,7 +461,7 @@ fn test_log_to_file() {
 /// ```
 /// let count = transfer_files(&config, true, Some(".*\\.xml".into()), 1);
 /// ```
-pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread_id: usize) -> i32 {
+pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
         log_with_thread("Shutdown requested, skipping transfer", Some(thread_id)).unwrap();
