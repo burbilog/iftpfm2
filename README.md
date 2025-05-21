@@ -80,7 +80,29 @@ You can also use the following options:
     -v: Print version information and exit.
     -d: Delete the source files after transferring them.
     -l logfile: Write log information to the specified log file.
-    -x pattern: Specify file matching pattern, defined by regular expression. Only files, matching this pattern will be transferred. By default ".*\.xml" pattern is used.
+    -x pattern: Specify file matching pattern, defined by regular expression. Only files matching this pattern will be transferred. By default ".*\.xml" pattern is used.
+    -p number: Set number of parallel threads to use (default: 1)
+    -r: Randomize processing order of configuration entries
+
+Single Instance Behavior:
+- Only one instance can run at a time
+- If a new instance starts, it will:
+  1. Attempt to gracefully terminate any running instance (SIGTERM)
+  2. Wait up to 5 seconds for graceful shutdown
+  3. Forcefully terminate if needed (SIGKILL)
+- Uses Unix domain socket (/tmp/iftpfm2.sock) and PID file (/tmp/iftpfm2.pid)
+- Cleanly removes lock files on exit
+
+Graceful Shutdown:
+- Handles SIGTERM/SIGINT signals
+- Completes current file transfer before exiting
+- Logs shutdown status
+- Thread-safe shutdown flag
+
+Logging Features:
+- Timestamps all messages
+- Includes thread IDs when using parallel mode
+- Can log to file or stdout
 
 Examples
 ========
