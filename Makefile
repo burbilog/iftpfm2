@@ -18,10 +18,12 @@ release:
 test:
 	cargo test
 
-# generate and install rust documentation
+# generate and install rust documentation (always rebuilds)
+.PHONY: doc
 doc:
+	@echo "Generating fresh documentation..."
+	@rm -rf doc target/doc
 	cargo doc --no-deps
-	@rm -rf doc
 	@mkdir -p doc
 	@cp -r target/doc/* doc/
-	@echo "Documentation generated in doc/"
+	@echo "Documentation regenerated in doc/"
