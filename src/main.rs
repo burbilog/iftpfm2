@@ -879,7 +879,7 @@ fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Res
 ///
 /// # Panics
 /// If signal handler registration fails
-fn check_single_instance() -> io::Result<()> {
+fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
     let socket_path = format!("/tmp/{}.sock", PROGRAM_NAME);
     
     // Try to connect to existing socket
@@ -962,13 +962,13 @@ fn cleanup_lock_file() {
 /// - 1: Error during initialization
 fn main() {
     // Parse arguments first to setup logging
-    let (delete, log_file, config_file, parallel, randomize, _grace_seconds) = parse_args();
+    let (delete, log_file, config_file, parallel, randomize, grace_seconds) = parse_args();
     if let Some(log_file) = log_file {
         set_log_file(log_file);
     }
 
     // Check for single instance after logging is configured
-    if let Err(e) = check_single_instance() {
+    if let Err(e) = check_single_instance(grace_seconds) {
         log(&format!("Error checking single instance: {}", e)).unwrap();
         process::exit(1);
     }
