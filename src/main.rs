@@ -629,6 +629,7 @@ fn check_single_instance() -> io::Result<()> {
         for _ in 0..50 {
             std::thread::sleep(Duration::from_millis(100));
             if UnixStream::connect(&socket_path).is_err() {
+                log("Previous instance has shut down, continuing with new instance").unwrap();
                 break;
             }
         }
@@ -655,11 +656,16 @@ fn check_single_instance() -> io::Result<()> {
                     if size >= 8 && &buffer[0..8] == b"SHUTDOWN" {
                         log("Received shutdown signal from new instance").unwrap();
                         request_shutdown();
+                        
+                        // Close the listener socket to allow new instance to bind
                         break;
                     }
                 }
             }
         }
+        
+        // Clean up socket when thread exits
+        let _ = std::fs::remove_file(&socket_path);
     });
 
     Ok(())
@@ -679,7 +685,7 @@ fn main() {
 
     // Check for single instance after logging is configured
     if let Err(e) = check_single_instance() {
-        log(&format!("Error: {}", e)).unwrap();
+        log(&format!("Error checking single instance: {}", e)).unwrap();
         process::exit(1);
     }
     
