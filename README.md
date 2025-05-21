@@ -60,7 +60,7 @@ Where:
 - `port_from`: Source FTP port (number, typically 21)
 - `login_from`: Source FTP username (string)
 - `password_from`: Source FTP password (string)  
-- `path_from`: Source path with optional wildcards (e.g. "/files/*.xml")
+- `path_from`: Source directory path (must be literal path, no wildcards)
 - `ip_address_to`: Destination FTP server hostname/IP (string)
 - `port_to`: Destination FTP port (number, typically 21)
 - `login_to`: Destination FTP username (string)
@@ -70,8 +70,14 @@ Where:
 
 Example:
 ```
-192.168.1.100,21,user1,pass1,/outgoing/*.xml,192.168.1.200,21,user2,pass2,/incoming,3600
+192.168.1.100,21,user1,pass1,/outgoing,192.168.1.200,21,user2,pass2,/incoming,3600
 ```
+
+File filtering behavior:
+- All files in the literal source path are retrieved via FTP NLST command
+- Files are then filtered by:
+  - Minimum age (specified in config file)
+  - Regular expression pattern (via -x command line option, default matches .xml files)
 ~~~
 
 - ip_address_from is the IP address of the FTP server to transfer files from.
@@ -128,13 +134,19 @@ Examples
 Here is an example configuration file that transfers all files in the /outgoing directory on the FTP server at 192.168.0.1 to the /incoming directory on the FTP server at 192.168.0.2, if they are at least one day old:
 
 ~~~
+# Literal source path (no wildcards) - files filtered by age and regex
 192.168.0.1,21,user1,password1,/outgoing,192.168.0.2,21,user2,password2,/incoming,86400
 ~~~
 
-Add this text to config.txt and run iftpfm2 to copy \*.xml files using this config file and delete source files after the transfer:
+Add this text to config.txt and run iftpfm2 to copy files using this config file (default will match .xml files) and delete source files after transfer:
 
 ~~~
 iftpfm2 -d config.csv
+~~~
+
+To copy only .zip files instead:
+~~~
+iftpfm2 -d -x ".*\.zip" config.csv
 ~~~
 
 Copy \*.zip files instead of \*.xml, delete source files and log debug output to file /tmp/iftpfm2.log:
