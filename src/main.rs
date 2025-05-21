@@ -112,7 +112,7 @@ pub struct Config {
     pub login_from: String,
     /// Password for source FTP server
     pub password_from: String,
-    /// Source path with optional wildcard (e.g. "/files/*.xml")
+    /// Source directory path (must be literal path, no wildcards)
     pub path_from: String,
     /// Destination FTP server IP/hostname  
     pub ip_address_to: String,
