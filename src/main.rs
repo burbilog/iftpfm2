@@ -37,6 +37,25 @@ fn print_usage() {
     );
 }
 
+/// Parses command line arguments and returns configuration options
+///
+/// # Returns
+/// A tuple containing:
+/// - `bool`: Whether to delete source files after transfer
+/// - `Option<String>`: Path to log file (None for stdout)
+/// - `Option<String>`: Path to config file
+/// - `Option<String>`: File matching regex pattern
+/// - `usize`: Number of parallel threads
+/// - `bool`: Whether to randomize processing order
+///
+/// # Panics
+/// - If required arguments are missing
+/// - If numeric arguments can't be parsed
+///
+/// # Example
+/// ```
+/// let (delete, log_file, config_file, ext, parallel, randomize) = parse_args();
+/// ```
 pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, usize, bool) {
     let mut log_file = None;
     let mut delete = false;
@@ -120,6 +139,28 @@ pub struct Config {
     pub age: u64,
 }
 
+/// Parses configuration file into a vector of Config structs
+///
+/// # Arguments
+/// * `filename` - Path to configuration file
+///
+/// # Returns
+/// * `Result<Vec<Config>, Error>` - Vector of parsed configs or error
+///
+/// # Errors
+/// - File not found or unreadable
+/// - Invalid field format (non-numeric where expected)
+/// - Missing required fields
+///
+/// # File Format
+/// CSV format with fields:
+/// ip_from,port_from,login_from,password_from,path_from,
+/// ip_to,port_to,login_to,password_to,path_to,min_age_secs
+///
+/// # Example
+/// ```
+/// let configs = parse_config("settings.csv")?;
+/// ```
 pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
@@ -389,6 +430,29 @@ fn test_log_to_file() {
     remove_file(log_file).unwrap();
 }
 
+/// Transfers files between FTP servers according to configuration
+///
+/// # Arguments
+/// * `config` - FTP connection and transfer parameters  
+/// * `delete` - Whether to delete source files after transfer
+/// * `ext` - Optional regex pattern for file matching
+/// * `thread_id` - Identifier for logging in parallel mode
+///
+/// # Returns
+/// Number of files successfully transferred
+///
+/// # Errors
+/// Logs errors but doesn't fail - returns count of successful transfers
+///
+/// # Behavior
+/// - Skips files younger than config.age seconds
+/// - Respects shutdown requests
+/// - Logs detailed transfer progress
+///
+/// # Example
+/// ```
+/// let count = transfer_files(&config, true, Some(".*\.xml".into()), 1);
+/// ```
 pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread_id: usize) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
@@ -681,11 +745,20 @@ use ctrlc;
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 // Check if shutdown was requested
+/// Checks if graceful shutdown has been requested
+///
+/// Threads should call this regularly and exit cleanly if true
+///
+/// # Returns
+/// `true` if shutdown was requested via signal
 pub fn is_shutdown_requested() -> bool {
     SHUTDOWN_REQUESTED.load(Ordering::SeqCst)
 }
 
 // Signal that shutdown is requested
+/// Signals all threads to shutdown gracefully
+///
+/// Sets global flag that threads should check via is_shutdown_requested()
 fn request_shutdown() {
     SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
 }
@@ -778,6 +851,19 @@ fn signal_process_to_terminate(socket_path: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Ensures only one instance runs at a time
+///
+/// # Behavior
+/// - Creates lock file with PID
+/// - Listens on Unix socket for shutdown requests
+/// - Handles cleanup on exit
+///
+/// # Errors
+/// - If socket creation fails
+/// - If PID file can't be written
+///
+/// # Panics
+/// If signal handler registration fails
 fn check_single_instance() -> io::Result<()> {
     let socket_path = format!("/tmp/{}.sock", PROGRAM_NAME);
     
@@ -832,6 +918,13 @@ fn check_single_instance() -> io::Result<()> {
     Ok(())
 }
 
+/// Cleans up single instance lock files
+///
+/// Removes:
+/// - Unix domain socket (/tmp/{PROGRAM_NAME}.sock)
+/// - PID file (/tmp/{PROGRAM_NAME}.pid)
+///
+/// Called automatically on program exit
 fn cleanup_lock_file() {
     let socket_path = format!("/tmp/{}.sock", PROGRAM_NAME);
     let pid_path = format!("/tmp/{}.pid", PROGRAM_NAME);
