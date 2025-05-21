@@ -32,7 +32,7 @@ use rayon::prelude::*;
 
 fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-r] [-x \".*\\.xml\"] [-l logfile] [-p parallel] config_file",
+        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] config_file",
         PROGRAM_NAME
     );
 }
@@ -56,11 +56,10 @@ fn print_usage() {
 /// ```
 /// let (delete, log_file, config_file, ext, parallel, randomize) = parse_args();
 /// ```
-pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, usize, bool) {
+pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool) {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
-    let mut ext = None;
     let mut parallel = 1;
     let mut randomize = false;
 
@@ -79,7 +78,6 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, us
             }
             "-d" => delete = true,
             "-l" => log_file = Some(args.next().expect("Missing log file argument")),
-            "-x" => ext = Some(args.next().expect("Missing matching regexp argument")),
             "-p" => parallel = args.next().expect("Missing parallel count argument").parse().expect("Parallel count must be a number"),
             "-r" => randomize = true,
             _ => {
@@ -94,11 +92,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, us
         process::exit(1);
     }
 
-    if ext.is_none() {
-        ext = Some(".*\\.xml".to_string());
-    }
-
-    (delete, log_file, config_file, ext, parallel, randomize)
+    (delete, log_file, config_file, parallel, randomize)
 }
 
 /// FTP transfer configuration parameters
@@ -963,7 +957,7 @@ fn cleanup_lock_file() {
 /// - 1: Error during initialization
 fn main() {
     // Parse arguments first to setup logging
-    let (delete, log_file, config_file, ext, parallel, randomize) = parse_args();
+    let (delete, log_file, config_file, _ext, parallel, randomize) = parse_args();
     if let Some(log_file) = log_file {
         set_log_file(log_file);
     }
