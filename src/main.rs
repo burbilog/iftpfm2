@@ -779,7 +779,7 @@ fn request_shutdown() {
 }
 
 // Signal the existing process to terminate gracefully
-fn signal_process_to_terminate(socket_path: &str) -> io::Result<()> {
+fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Result<()> {
     // Use lsof to find process using the socket
     let output = Command::new("lsof")
         .arg("-t")  // Output only PID
@@ -888,7 +888,7 @@ fn check_single_instance() -> io::Result<()> {
             std::process::id())).unwrap();
         
         // Try to signal the process to terminate gracefully
-        if let Err(e) = signal_process_to_terminate(&socket_path) {
+        if let Err(e) = signal_process_to_terminate(&socket_path, grace_seconds) {
             log(&format!("Failed to signal old process: {}", e)).unwrap();
         }
         
@@ -962,7 +962,7 @@ fn cleanup_lock_file() {
 /// - 1: Error during initialization
 fn main() {
     // Parse arguments first to setup logging
-    let (delete, log_file, config_file, parallel, randomize, grace_seconds) = parse_args();
+    let (delete, log_file, config_file, parallel, randomize, _grace_seconds) = parse_args();
     if let Some(log_file) = log_file {
         set_log_file(log_file);
     }
