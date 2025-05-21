@@ -723,9 +723,9 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
 /// - Unix domain socket (/tmp/{PROGRAM_NAME}.sock)
 const PROGRAM_NAME: &str = "iftpfm2";
 
-/// Current version of the program
+/// Current version of the program (from Cargo.toml)
 /// Follows semantic versioning (MAJOR.MINOR.PATCH)
-const PROGRAM_VERSION: &str = "2.0.3";
+const PROGRAM_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, Ordering};
