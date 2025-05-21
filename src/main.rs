@@ -601,7 +601,7 @@ fn main() {
     let delete_arc = Arc::new(delete);
     let ext_arc = Arc::new(ext);
 
-    total_transfers = pool.install(|| {
+    let total_transfers = pool.install(|| {
         configs_arc
             .par_iter()
             .map(|cf| transfer_files(cf, *delete_arc, ext_arc.as_ref().clone()))
