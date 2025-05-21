@@ -57,12 +57,13 @@ fn print_usage() {
 /// ```
 /// let (delete, log_file, config_file, ext, parallel, randomize) = parse_args();
 /// ```
-pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool) {
+pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64) {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
     let mut parallel = 1;
     let mut randomize = false;
+    let mut grace_seconds = 30;
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -81,6 +82,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool) {
             "-l" => log_file = Some(args.next().expect("Missing log file argument")),
             "-p" => parallel = args.next().expect("Missing parallel count argument").parse().expect("Parallel count must be a number"),
             "-r" => randomize = true,
+            "-g" => grace_seconds = args.next().expect("Missing grace seconds argument").parse().expect("Grace seconds must be a number"),
             _ => {
                 config_file = Some(arg);
             }
@@ -93,7 +95,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool) {
         process::exit(1);
     }
 
-    (delete, log_file, config_file, parallel, randomize)
+    (delete, log_file, config_file, parallel, randomize, grace_seconds)
 }
 
 /// FTP transfer configuration parameters
@@ -823,8 +825,8 @@ fn signal_process_to_terminate(socket_path: &str) -> io::Result<()> {
     
     log(&format!("Successfully sent termination signal to old instance with PID {}", pid_str)).unwrap();
     
-    // Wait for up to 30 seconds for the process to terminate
-    for i in 1..=60 {
+    // Wait for up to grace_seconds for the process to terminate
+    for i in 1..=(grace_seconds * 2) {
         std::thread::sleep(std::time::Duration::from_millis(500));
         
         // Check if the process is still running
@@ -839,8 +841,8 @@ fn signal_process_to_terminate(socket_path: &str) -> io::Result<()> {
         }
         
         if i % 2 == 0 {
-            log(&format!("Waiting for old instance with PID {} to terminate ({} seconds)...", 
-                pid_str, i/2)).unwrap();
+            log(&format!("Waiting for old instance with PID {} to terminate ({} of {} seconds)...", 
+                pid_str, i/2, grace_seconds)).unwrap();
         }
     }
     
@@ -960,7 +962,7 @@ fn cleanup_lock_file() {
 /// - 1: Error during initialization
 fn main() {
     // Parse arguments first to setup logging
-    let (delete, log_file, config_file, parallel, randomize) = parse_args();
+    let (delete, log_file, config_file, parallel, randomize, grace_seconds) = parse_args();
     if let Some(log_file) = log_file {
         set_log_file(log_file);
     }

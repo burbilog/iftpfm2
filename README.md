@@ -97,12 +97,13 @@ You can also use the following options:
     -l logfile: Write log information to the specified log file.
     -p number: Set number of parallel threads to use (default: 1)
     -r: Randomize processing order of configuration entries
+    -g seconds: Grace period for shutdown in seconds (default: 30)
 
 Single Instance Behavior:
 - Only one instance can run at a time
 - When a new instance starts, it will:
   1. Attempt to gracefully terminate any running instance (SIGTERM)
-  2. Wait up to 30 seconds for graceful shutdown
+  2. Wait up to configured grace period (default: 30 seconds) for graceful shutdown
   3. Forcefully terminate if needed (SIGKILL)
 - Uses a Unix domain socket (/tmp/iftpfm2.sock) and PID file (/tmp/iftpfm2.pid)
 - Automatically removes lock files on exit
