@@ -17,3 +17,11 @@ release:
 # run unit tests
 test:
 	cargo test
+
+# generate and install rust documentation
+doc:
+	cargo doc --no-deps
+	@rm -rf doc
+	@mkdir -p doc
+	@cp -r target/doc/* doc/
+	@echo "Documentation generated in doc/"
