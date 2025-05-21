@@ -585,18 +585,29 @@ const PROGRAM_NAME: &str = "iftpfm2";
 const PROGRAM_VERSION: &str = "2.0.2";
 
 fn check_single_instance() -> io::Result<()> {
-    let lock_file = "/tmp/iftpfm2.lock";
+    // Get runtime directory - prefer XDG_RUNTIME_DIR, fallback to /tmp
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| "/tmp".to_string());
+    
+    let lock_dir = format!("{}/{}", runtime_dir, PROGRAM_NAME);
+    fs::create_dir_all(&lock_dir)?;
+    
+    // Set restrictive permissions (rwx------)
+    fs::set_permissions(&lock_dir, fs::Permissions::from_mode(0o700))?;
+    
+    let lock_file = format!("{}/lock.pid", lock_dir);
     
     // Read existing lock file if it exists
-    if let Ok(contents) = std::fs::read_to_string(lock_file) {
+    if let Ok(contents) = fs::read_to_string(&lock_file) {
         if let Ok(pid) = contents.trim().parse::<i32>() {
-            // Check if process still exists
-            let output = Command::new("ps")
-                .arg("-p")
+            // Check if process exists using kill -0
+            if std::process::Command::new("kill")
+                .arg("-0")
                 .arg(pid.to_string())
-                .output()?;
-            
-            if output.status.success() {
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+            {
                 return Err(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!("Another instance is already running with PID {}", pid)
@@ -605,13 +616,19 @@ fn check_single_instance() -> io::Result<()> {
         }
     }
     
-    // Create new lock file
-    std::fs::write(lock_file, process::id().to_string())?;
+    // Create new lock file with restrictive permissions
+    let mut file = fs::File::create(&lock_file)?;
+    file.write_all(process::id().to_string().as_bytes())?;
+    fs::set_permissions(&lock_file, fs::Permissions::from_mode(0o600))?;
+    
     Ok(())
 }
 
 fn cleanup_lock_file() {
-    let _ = std::fs::remove_file("/tmp/iftpfm2.lock");
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| "/tmp".to_string());
+    let lock_file = format!("{}/{}/lock.pid", runtime_dir, PROGRAM_NAME);
+    let _ = fs::remove_file(lock_file);
 }
 
 fn main() {
