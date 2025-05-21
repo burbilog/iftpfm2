@@ -663,8 +663,8 @@ fn signal_process_to_terminate(socket_path: &str) -> io::Result<()> {
     
     log(&format!("Successfully sent termination signal to old instance with PID {}", pid_str)).unwrap();
     
-    // Wait for up to 5 seconds for the process to terminate
-    for i in 1..=10 {
+    // Wait for up to 30 seconds for the process to terminate
+    for i in 1..=60 {
         std::thread::sleep(std::time::Duration::from_millis(500));
         
         // Check if the process is still running

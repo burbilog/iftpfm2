@@ -88,7 +88,7 @@ Single Instance Behavior:
 - Only one instance can run at a time
 - If a new instance starts, it will:
   1. Attempt to gracefully terminate any running instance (SIGTERM)
-  2. Wait up to 5 seconds for graceful shutdown
+  2. Wait up to 30 seconds for graceful shutdown
   3. Forcefully terminate if needed (SIGKILL)
 - Uses Unix domain socket (/tmp/iftpfm2.sock) and PID file (/tmp/iftpfm2.pid)
 - Cleanly removes lock files on exit
