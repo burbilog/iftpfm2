@@ -8,7 +8,7 @@ use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::path::Path;
-use std::process;
+use std::process::{self, Command};
 use std::str::FromStr;
 use std::time::SystemTime;
 use once_cell::sync::Lazy;
@@ -584,7 +584,46 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
 const PROGRAM_NAME: &str = "iftpfm2";
 const PROGRAM_VERSION: &str = "2.0.2";
 
+fn check_single_instance() -> io::Result<()> {
+    let lock_file = "/tmp/iftpfm2.lock";
+    
+    // Read existing lock file if it exists
+    if let Ok(contents) = std::fs::read_to_string(lock_file) {
+        if let Ok(pid) = contents.trim().parse::<i32>() {
+            // Check if process still exists
+            let output = Command::new("ps")
+                .arg("-p")
+                .arg(pid.to_string())
+                .output()?;
+            
+            if output.status.success() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("Another instance is already running with PID {}", pid)
+                );
+            }
+        }
+    }
+    
+    // Create new lock file
+    std::fs::write(lock_file, process::id().to_string())?;
+    Ok(())
+}
+
+fn cleanup_lock_file() {
+    let _ = std::fs::remove_file("/tmp/iftpfm2.lock");
+}
+
 fn main() {
+    // Check for single instance
+    if let Err(e) = check_single_instance() {
+        log(&format!("Error: {}", e)).unwrap();
+        process::exit(1);
+    }
+    
+    // Ensure lock file is removed on normal exit
+    let _cleanup = scopeguard::guard((), |_| cleanup_lock_file());
+
     // Parse arguments and setup logging
     let (delete, log_file, config_file, ext, parallel) = parse_args();
     if let Some(log_file) = log_file {
