@@ -253,9 +253,16 @@ static LOG_FILE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 ///
 /// * `io::Result<()>` - Ok if the logging was successful, Err otherwise
 pub fn log(message: &str) -> io::Result<()> {
+    log_with_thread(message, None)
+}
+
+pub fn log_with_thread(message: &str, thread_id: Option<usize>) -> io::Result<()> {
     // Generate a timestamp for the log message
     let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let log_message = format!("{} {}\n", timestamp, message);
+    let log_message = match thread_id {
+        Some(tid) => format!("{} [T{}] {}\n", timestamp, tid, message),
+        None => format!("{} {}\n", timestamp, message),
+    };
 
     // Lock the mutex and check if a log file has been set
     match &*LOG_FILE.lock().unwrap() {
@@ -311,8 +318,8 @@ fn test_log_to_file() {
     remove_file(log_file).unwrap();
 }
 
-pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32 {
-    log(format!(
+pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread_id: usize) -> i32 {
+    log_with_thread(format!(
         "Transferring files from ftp://{}:{}{} to ftp://{}:{}{}",
         config.ip_address_from,
         config.port_from,
@@ -321,7 +328,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>) -> i32
         config.port_to,
         config.path_to
     )
-    .as_str())
+    .as_str(), Some(thread_id))
     .unwrap();
     // Connect to the source FTP server
     let mut ftp_from = match FtpStream::connect((config.ip_address_from.as_str(), config.port_from))
@@ -604,7 +611,11 @@ fn main() {
     let total_transfers: i32 = pool.install(|| {
         configs_arc
             .par_iter()
-            .map(|cf| transfer_files(cf, *delete_arc, ext_arc.as_ref().clone()))
+            .enumerate()
+            .map(|(idx, cf)| {
+                let thread_id = rayon::current_thread_index().unwrap_or(idx);
+                transfer_files(cf, *delete_arc, ext_arc.as_ref().clone(), thread_id)
+            })
             .sum()
     });
 
