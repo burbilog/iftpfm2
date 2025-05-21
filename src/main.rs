@@ -320,6 +320,12 @@ fn test_log_to_file() {
 }
 
 pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread_id: usize) -> i32 {
+    // Check for shutdown request before starting
+    if is_shutdown_requested() {
+        log_with_thread("Shutdown requested, skipping transfer", Some(thread_id)).unwrap();
+        return 0;
+    }
+    
     log_with_thread(format!(
         "Transferring files from ftp://{}:{}{} to ftp://{}:{}{}",
         config.ip_address_from,
@@ -434,6 +440,12 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     // Transfer each file from the source to the target directory
     let mut successful_transfers = 0;
     for filename in file_list {
+        // Check for shutdown request before each file
+        if is_shutdown_requested() {
+            log_with_thread("Shutdown requested, aborting remaining transfers", Some(thread_id)).unwrap();
+            break;
+        }
+        
         if !regex.is_match(&filename) {
             log_with_thread(format!(
                 "Skipping file {} as it did not match regex {}",
