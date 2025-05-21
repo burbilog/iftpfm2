@@ -1,11 +1,11 @@
 iftpfm2
 =======
 
-"iftpfm2" is a command-line utility that transfers files between FTP servers based on a configuration file. The name "iftpfm" stands for "Idiotic FTP File Mover" because it was created to solve the problem of transferring large numbers of files between multiple FTP servers and directories using 1C software. 1C lacks the ability to write to temporary files and rename the resulting file, which can lead to the transfer of incomplete files using simple tools like ncftpget/ncftpput. '2' is because the first version was just a messy bash script.
+"iftpfm2" is a command-line utility that transfers files between FTP servers based on a configuration file. The name "iftpfm" stands for "Idiotic FTP File Mover" - it was created to solve the problem of transferring large numbers of files between multiple FTP servers and directories when using 1C software. Since 1C lacks the ability to write to temporary files and rename them atomically, simple tools like ncftpget/ncftpput can result in transferring incomplete files. The '2' suffix indicates this is the second version, replacing an original messy bash script.
 
-As of Jan 2023 I had no prior knowledge of Rust before creating this tool. This program was written primarily by ChatGPT, who was able to quickly implement the necessary features by following my instructions in plain English. I was surprised at how smoothly the process went, considering it was my first time using Rust, thanks to ChatGPT, answering a lot of fucking stupid questions and doing all the heavy lifting for me.
+As of January 2023, I had no prior Rust experience before creating this tool. The program was developed primarily with ChatGPT's assistance, which implemented the necessary features by following my plain English instructions. Despite being my first Rust project, the process went remarkably smoothly thanks to ChatGPT handling the heavy lifting and answering numerous basic questions.
 
-Later improvements and refinements in May 2025 were made with the help of Sonnet and DeepSeek, who helped polish the documentation and fix subtle issues in the code.
+Later improvements and refinements in May 2025 were made with help from Sonnet and DeepSeek, which helped polish the documentation and fix subtle code issues.
 
 Installation
 ============
@@ -44,7 +44,7 @@ cargo build --release
 
 This will compile the program and create an executable file called ifptfm2 in the target/release directory.
 
-You can then run the program by typing ./target/release/ifptfm2 followed by the appropriate command line arguments (e.g. ./target/release/ifptfm2 config_file.txt).
+You can then run the program by typing `./target/release/ifptfm2` followed by the appropriate command line arguments (for example: `./target/release/ifptfm2 config_file.txt`).
 
 
 
@@ -62,7 +62,7 @@ Where:
 - `hostfrom`: Source FTP server hostname/IP (string)
 - `portfrom`: Source FTP port (number, typically 21)
 - `userfrom`: Source FTP username (string)
-- `passfrom`: Source FTP password (string)  
+- `passfrom`: Source FTP password (string)
 - `pathfrom`: Source directory path (must be literal path, no wildcards)
 - `hostto`: Destination FTP server hostname/IP (string)
 - `portto`: Destination FTP port (number, typically 21)
@@ -100,12 +100,12 @@ You can also use the following options:
 
 Single Instance Behavior:
 - Only one instance can run at a time
-- If a new instance starts, it will:
+- When a new instance starts, it will:
   1. Attempt to gracefully terminate any running instance (SIGTERM)
   2. Wait up to 30 seconds for graceful shutdown
   3. Forcefully terminate if needed (SIGKILL)
-- Uses Unix domain socket (/tmp/iftpfm2.sock) and PID file (/tmp/iftpfm2.pid)
-- Cleanly removes lock files on exit
+- Uses a Unix domain socket (/tmp/iftpfm2.sock) and PID file (/tmp/iftpfm2.pid)
+- Automatically removes lock files on exit
 
 Graceful Shutdown:
 - Handles SIGTERM/SIGINT signals
