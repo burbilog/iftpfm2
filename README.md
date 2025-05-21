@@ -74,7 +74,7 @@ Where:
 
 Example:
 ```
-192.168.1.100,21,user1,pass1,/outgoing,192.168.1.200,21,user2,pass2,/incoming,3600
+192.168.1.100,21,user1,pass1,/outgoing,192.168.1.200,21,user2,pass2,/incoming,3600,.*\.xml$
 ```
 
 File filtering behavior:
@@ -121,31 +121,17 @@ Logging Features:
 Examples
 ========
 
-Here is an example configuration file that transfers all files in the /outgoing directory on the FTP server at 192.168.0.1 to the /incoming directory on the FTP server at 192.168.0.2, if they are at least one day old:
+Here is an example configuration file that transfers CSV files from the /outgoing directory on the FTP server at 192.168.0.1 to the /incoming directory on the FTP server at 192.168.0.2, if they are at least one day old, filtered by age (86400 seconds) and regexp `.*\.csv$`:
 
-~~~
-# Literal source path (no wildcards) - files filtered by age and regex
-192.168.0.1,21,user1,password1,/outgoing,192.168.0.2,21,user2,password2,/incoming,86400
-~~~
+```
+192.168.0.1,21,user1,password1,/outgoing,192.168.0.2,21,user2,password2,/incoming,86400,.*\.csv$
+```
 
-Add this text to config.txt and run iftpfm2 to copy files using this config file (default will match .xml files) and delete source files after transfer:
+Add this text to config.txt and run iftpfm2 to copy files using this config file and delete source files after transfer:
 
-~~~
+```
 iftpfm2 -d config.csv
-~~~
-
-To copy only .zip files instead:
-~~~
-iftpfm2 -d -x ".*\.zip" config.csv
-~~~
-
-Copy \*.zip files instead of \*.xml, delete source files and log debug output to file /tmp/iftpfm2.log:
-
-~~~
-iftpfm2 -d -x ".*\.zip" -l /tmp/iftpfm2.log config.csv
-~~~
-
-Keep in mind that the file pattern is a regular expression, not a standard shell glob.
+```
 
 Author
 ======
