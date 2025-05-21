@@ -16,17 +16,18 @@ use rayon::prelude::*;
 
 fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-x \".*\\.xml\"] [-l logfile] [-p parallel] config_file",
+        "Usage: {} [-h] [-v] [-d] [-r] [-x \".*\\.xml\"] [-l logfile] [-p parallel] config_file",
         PROGRAM_NAME
     );
 }
 
-pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, usize) {
+pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, usize, bool) {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
     let mut ext = None;
     let mut parallel = 1;
+    let mut randomize = false;
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -45,6 +46,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, us
             "-l" => log_file = Some(args.next().expect("Missing log file argument")),
             "-x" => ext = Some(args.next().expect("Missing matching regexp argument")),
             "-p" => parallel = args.next().expect("Missing parallel count argument").parse().expect("Parallel count must be a number"),
+            "-r" => randomize = true,
             _ => {
                 config_file = Some(arg);
             }
@@ -61,7 +63,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, us
         ext = Some(".*\\.xml".to_string());
     }
 
-    (delete, log_file, config_file, ext, parallel)
+    (delete, log_file, config_file, ext, parallel, randomize)
 }
 
 #[derive(Debug, PartialEq)]
@@ -618,7 +620,7 @@ fn cleanup_lock_file() {
 
 fn main() {
     // Parse arguments first to setup logging
-    let (delete, log_file, config_file, ext, parallel) = parse_args();
+    let (delete, log_file, config_file, ext, parallel, randomize) = parse_args();
     if let Some(log_file) = log_file {
         set_log_file(log_file);
     }
@@ -644,7 +646,13 @@ fn main() {
         .build()
         .unwrap();
 
-    // Process configs in parallel
+    // Process configs in parallel (randomize order if requested)
+    let mut configs = configs;
+    if randomize {
+        use rand::seq::SliceRandom;
+        use rand::thread_rng;
+        configs.shuffle(&mut thread_rng());
+    }
     let configs_arc = Arc::new(configs);
     let delete_arc = Arc::new(delete);
     let ext_arc = Arc::new(ext);
