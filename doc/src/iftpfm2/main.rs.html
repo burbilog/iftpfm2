@@ -1009,6 +1009,19 @@
 <a href="#1009" id="1009">1009</a>
 <a href="#1010" id="1010">1010</a>
 <a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a>
+<a href="#1023" id="1023">1023</a>
+<a href="#1024" id="1024">1024</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! FTP File Mover Utility
 //!
 //! A multi-threaded tool for transferring files between FTP servers with:
@@ -1043,7 +1056,7 @@
 
 <span class="kw">fn </span>print_usage() {
     <span class="macro">println!</span>(
-        <span class="string">"Usage: {} [-h] [-v] [-d] [-r] [-x \".*\\.xml\"] [-l logfile] [-p parallel] config_file"</span>,
+        <span class="string">"Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] config_file"</span>,
         PROGRAM_NAME
     );
 }
@@ -1067,11 +1080,10 @@
 /// ```
 /// let (delete, log_file, config_file, ext, parallel, randomize) = parse_args();
 /// ```
-</span><span class="kw">pub fn </span>parse_args() -&gt; (bool, <span class="prelude-ty">Option</span>&lt;String&gt;, <span class="prelude-ty">Option</span>&lt;String&gt;, <span class="prelude-ty">Option</span>&lt;String&gt;, usize, bool) {
+</span><span class="kw">pub fn </span>parse_args() -&gt; (bool, <span class="prelude-ty">Option</span>&lt;String&gt;, <span class="prelude-ty">Option</span>&lt;String&gt;, usize, bool) {
     <span class="kw">let </span><span class="kw-2">mut </span>log_file = <span class="prelude-val">None</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>delete = <span class="bool-val">false</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>config_file = <span class="prelude-val">None</span>;
-    <span class="kw">let </span><span class="kw-2">mut </span>ext = <span class="prelude-val">None</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>parallel = <span class="number">1</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>randomize = <span class="bool-val">false</span>;
 
@@ -1090,7 +1102,6 @@
             }
             <span class="string">"-d" </span>=&gt; delete = <span class="bool-val">true</span>,
             <span class="string">"-l" </span>=&gt; log_file = <span class="prelude-val">Some</span>(args.next().expect(<span class="string">"Missing log file argument"</span>)),
-            <span class="string">"-x" </span>=&gt; ext = <span class="prelude-val">Some</span>(args.next().expect(<span class="string">"Missing matching regexp argument"</span>)),
             <span class="string">"-p" </span>=&gt; parallel = args.next().expect(<span class="string">"Missing parallel count argument"</span>).parse().expect(<span class="string">"Parallel count must be a number"</span>),
             <span class="string">"-r" </span>=&gt; randomize = <span class="bool-val">true</span>,
             <span class="kw">_ </span>=&gt; {
@@ -1105,11 +1116,7 @@
         process::exit(<span class="number">1</span>);
     }
 
-    <span class="kw">if </span>ext.is_none() {
-        ext = <span class="prelude-val">Some</span>(<span class="string">".*\\.xml"</span>.to_string());
-    }
-
-    (delete, log_file, config_file, ext, parallel, randomize)
+    (delete, log_file, config_file, parallel, randomize)
 }
 
 <span class="doccomment">/// FTP transfer configuration parameters
@@ -1137,6 +1144,8 @@
     </span><span class="kw">pub </span>path_to: String,
     <span class="doccomment">/// Minimum file age to transfer (seconds)
     </span><span class="kw">pub </span>age: u64,
+    <span class="doccomment">/// Regular expression pattern for filename matching
+    </span><span class="kw">pub </span>filename_regexp: String,
 }
 
 <span class="doccomment">/// Parses configuration file into a vector of Config structs
@@ -1173,11 +1182,11 @@
         }
 
         <span class="kw">let </span><span class="kw-2">mut </span>fields = line.split(<span class="string">','</span>);
-        <span class="kw">let </span>ip_address_from = fields
+        <span class="kw">let </span>host_from = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                <span class="string">"missing field: ip_address_from"</span>,
+                <span class="string">"missing field: host_from"</span>,
             ))<span class="question-mark">?
             </span>.to_string();
         <span class="kw">let </span>port_from = u16::from_str(fields.next().ok_or(Error::new(
@@ -1185,18 +1194,18 @@
             <span class="string">"missing field: port_from"</span>,
         ))<span class="question-mark">?</span>)
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))<span class="question-mark">?</span>;
-        <span class="kw">let </span>login_from = fields
+        <span class="kw">let </span>user_from = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                <span class="string">"missing field: login_from"</span>,
+                <span class="string">"missing field: user_from"</span>,
             ))<span class="question-mark">?
             </span>.to_string();
-        <span class="kw">let </span>password_from = fields
+        <span class="kw">let </span>pass_from = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                <span class="string">"missing field: password_from"</span>,
+                <span class="string">"missing field: pass_from"</span>,
             ))<span class="question-mark">?
             </span>.to_string();
         <span class="kw">let </span>path_from = fields
@@ -1206,11 +1215,11 @@
                 <span class="string">"missing field: path_from"</span>,
             ))<span class="question-mark">?
             </span>.to_string();
-        <span class="kw">let </span>ip_address_to = fields
+        <span class="kw">let </span>host_to = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                <span class="string">"missing field: ip_address_to"</span>,
+                <span class="string">"missing field: host_to"</span>,
             ))<span class="question-mark">?
             </span>.to_string();
         <span class="kw">let </span>port_to = u16::from_str(fields.next().ok_or(Error::new(
@@ -1218,18 +1227,18 @@
             <span class="string">"missing field: port_to"</span>,
         ))<span class="question-mark">?</span>)
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))<span class="question-mark">?</span>;
-        <span class="kw">let </span>login_to = fields
+        <span class="kw">let </span>user_to = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                <span class="string">"missing field: login_to"</span>,
+                <span class="string">"missing field: user_to"</span>,
             ))<span class="question-mark">?
             </span>.to_string();
-        <span class="kw">let </span>password_to = fields
+        <span class="kw">let </span>pass_to = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                <span class="string">"missing field: password_to"</span>,
+                <span class="string">"missing field: pass_to"</span>,
             ))<span class="question-mark">?
             </span>.to_string();
         <span class="kw">let </span>path_to = fields
@@ -1246,18 +1255,35 @@
         )
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))<span class="question-mark">?</span>;
 
+        <span class="kw">let </span>filename_regexp = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                <span class="string">"missing field: filename_regexp"</span>,
+            ))<span class="question-mark">?
+            </span>.to_string();
+
+        <span class="comment">// Validate the regex pattern
+        </span>Regex::new(<span class="kw-2">&amp;</span>filename_regexp).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                <span class="macro">format!</span>(<span class="string">"invalid filename regex pattern: {}"</span>, e),
+            )
+        })<span class="question-mark">?</span>;
+
         configs.push(Config {
-            ip_address_from,
+            ip_address_from: host_from,
             port_from,
-            login_from,
-            password_from,
+            login_from: user_from,
+            password_from: pass_from,
             path_from,
-            ip_address_to,
+            ip_address_to: host_to,
             port_to,
-            login_to,
-            password_to,
+            login_to: user_to,
+            password_to: pass_to,
             path_to,
             age,
+            filename_regexp,
         });
     }
 
@@ -1453,7 +1479,7 @@
 /// ```
 /// let count = transfer_files(&amp;config, true, Some(".*\\.xml".into()), 1);
 /// ```
-</span><span class="kw">pub fn </span>transfer_files(config: <span class="kw-2">&amp;</span>Config, delete: bool, ext: <span class="prelude-ty">Option</span>&lt;String&gt;, thread_id: usize) -&gt; i32 {
+</span><span class="kw">pub fn </span>transfer_files(config: <span class="kw-2">&amp;</span>Config, delete: bool, thread_id: usize) -&gt; i32 {
     <span class="comment">// Check for shutdown request before starting
     </span><span class="kw">if </span>is_shutdown_requested() {
         log_with_thread(<span class="string">"Shutdown requested, skipping transfer"</span>, <span class="prelude-val">Some</span>(thread_id)).unwrap();
@@ -1562,15 +1588,16 @@
     )
     .as_str(), <span class="prelude-val">Some</span>(thread_id))
     .unwrap();
-    <span class="kw">let </span>ext_regex = <span class="kw">match </span>ext.as_ref().map(String::as_str) {
-        <span class="prelude-val">Some</span>(ext) =&gt; Regex::new(ext),
-        <span class="prelude-val">None </span>=&gt; {
-            <span class="comment">// Handle the case where `ext` is None
-            </span>log_with_thread(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"FUCK"</span>), <span class="prelude-val">Some</span>(thread_id)).unwrap();
+    <span class="kw">let </span>regex = <span class="kw">match </span>Regex::new(<span class="kw-2">&amp;</span>config.filename_regexp) {
+        <span class="prelude-val">Ok</span>(re) =&gt; re,
+        <span class="prelude-val">Err</span>(e) =&gt; {
+            log_with_thread(
+                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"Invalid filename regex pattern '{}': {}"</span>, config.filename_regexp, e),
+                <span class="prelude-val">Some</span>(thread_id),
+            ).unwrap();
             <span class="kw">return </span><span class="number">0</span>;
         }
     };
-    <span class="kw">let </span>regex = ext_regex.unwrap();
     <span class="comment">// Transfer each file from the source to the target directory
     </span><span class="kw">let </span><span class="kw-2">mut </span>successful_transfers = <span class="number">0</span>;
     <span class="kw">for </span>filename <span class="kw">in </span>file_list {
@@ -1954,7 +1981,7 @@
 /// - 1: Error during initialization
 </span><span class="kw">fn </span>main() {
     <span class="comment">// Parse arguments first to setup logging
-    </span><span class="kw">let </span>(delete, log_file, config_file, ext, parallel, randomize) = parse_args();
+    </span><span class="kw">let </span>(delete, log_file, config_file, parallel, randomize) = parse_args();
     <span class="kw">if let </span><span class="prelude-val">Some</span>(log_file) = log_file {
         set_log_file(log_file);
     }
@@ -1989,7 +2016,6 @@
     }
     <span class="kw">let </span>configs_arc = Arc::new(configs);
     <span class="kw">let </span>delete_arc = Arc::new(delete);
-    <span class="kw">let </span>ext_arc = Arc::new(ext);
 
     <span class="kw">let </span>total_transfers: i32 = pool.install(|| {
         configs_arc
@@ -2001,7 +2027,7 @@
                     <span class="kw">return </span><span class="number">0</span>;
                 }
                 <span class="kw">let </span>thread_id = rayon::current_thread_index().unwrap_or(idx);
-                transfer_files(cf, <span class="kw-2">*</span>delete_arc, ext_arc.as_ref().clone(), thread_id)
+                transfer_files(cf, <span class="kw-2">*</span>delete_arc, thread_id)
             })
             .sum()
     });
