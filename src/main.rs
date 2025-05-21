@@ -728,7 +728,14 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     successful_transfers
 }
 
+/// Name of the program used for:
+/// - Process identification
+/// - Lock files (/tmp/{PROGRAM_NAME}.pid)
+/// - Unix domain socket (/tmp/{PROGRAM_NAME}.sock)
 const PROGRAM_NAME: &str = "iftpfm2";
+
+/// Current version of the program
+/// Follows semantic versioning (MAJOR.MINOR.PATCH)
 const PROGRAM_VERSION: &str = "2.0.3";
 
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -932,6 +939,19 @@ fn cleanup_lock_file() {
     let _ = std::fs::remove_file(pid_path);
 }
 
+/// Main program entry point
+///
+/// # Behavior
+/// 1. Parses command line arguments
+/// 2. Sets up logging
+/// 3. Enforces single instance
+/// 4. Reads configuration
+/// 5. Processes transfers in parallel
+/// 6. Handles graceful shutdown
+///
+/// # Exit Codes
+/// - 0: Success
+/// - 1: Error during initialization
 fn main() {
     // Parse arguments first to setup logging
     let (delete, log_file, config_file, ext, parallel, randomize) = parse_args();

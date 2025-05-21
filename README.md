@@ -53,7 +53,25 @@ To use iftpfm2, you need to create a configuration file that specifies the conne
 
 ~~~
 # This is a comment
-ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_to,login_to,password_to,path_to,age
+ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_to,login_to,password_to,path_to,min_age_secs
+
+Where:
+- `ip_address_from`: Source FTP server hostname/IP (string)
+- `port_from`: Source FTP port (number, typically 21)
+- `login_from`: Source FTP username (string)
+- `password_from`: Source FTP password (string)  
+- `path_from`: Source path with optional wildcards (e.g. "/files/*.xml")
+- `ip_address_to`: Destination FTP server hostname/IP (string)
+- `port_to`: Destination FTP port (number, typically 21)
+- `login_to`: Destination FTP username (string)
+- `password_to`: Destination FTP password (string)
+- `path_to`: Destination directory path (string)
+- `min_age_secs`: Minimum file age to transfer (seconds, number)
+
+Example:
+```
+192.168.1.100,21,user1,pass1,/outgoing/*.xml,192.168.1.200,21,user2,pass2,/incoming,3600
+```
 ~~~
 
 - ip_address_from is the IP address of the FTP server to transfer files from.
