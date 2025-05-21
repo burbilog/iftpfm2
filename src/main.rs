@@ -600,7 +600,7 @@ fn check_single_instance() -> io::Result<()> {
                 return Err(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!("Another instance is already running with PID {}", pid)
-                );
+                ));
             }
         }
     }
