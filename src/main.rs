@@ -162,11 +162,11 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
         }
 
         let mut fields = line.split(',');
-        let ip_address_from = fields
+        let host_from = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                "missing field: ip_address_from",
+                "missing field: host_from",
             ))?
             .to_string();
         let port_from = u16::from_str(fields.next().ok_or(Error::new(
@@ -174,18 +174,18 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
             "missing field: port_from",
         ))?)
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
-        let login_from = fields
+        let user_from = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                "missing field: login_from",
+                "missing field: user_from",
             ))?
             .to_string();
-        let password_from = fields
+        let pass_from = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                "missing field: password_from",
+                "missing field: pass_from",
             ))?
             .to_string();
         let path_from = fields
@@ -195,11 +195,11 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
                 "missing field: path_from",
             ))?
             .to_string();
-        let ip_address_to = fields
+        let host_to = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                "missing field: ip_address_to",
+                "missing field: host_to",
             ))?
             .to_string();
         let port_to = u16::from_str(fields.next().ok_or(Error::new(
@@ -207,18 +207,18 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
             "missing field: port_to",
         ))?)
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
-        let login_to = fields
+        let user_to = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                "missing field: login_to",
+                "missing field: user_to",
             ))?
             .to_string();
-        let password_to = fields
+        let pass_to = fields
             .next()
             .ok_or(Error::new(
                 ErrorKind::InvalidInput,
-                "missing field: password_to",
+                "missing field: pass_to",
             ))?
             .to_string();
         let path_to = fields
@@ -235,18 +235,35 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
         )
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
 
+        let filename_regexp = fields
+            .next()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "missing field: filename_regexp",
+            ))?
+            .to_string();
+
+        // Validate the regex pattern
+        Regex::new(&filename_regexp).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                format!("invalid filename regex pattern: {}", e),
+            )
+        })?;
+
         configs.push(Config {
-            ip_address_from,
+            host_from,
             port_from,
-            login_from,
-            password_from,
+            user_from,
+            pass_from,
             path_from,
-            ip_address_to,
+            host_to,
             port_to,
-            login_to,
-            password_to,
+            user_to,
+            pass_to,
             path_to,
             age,
+            filename_regexp,
         });
     }
 
@@ -551,15 +568,16 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     )
     .as_str(), Some(thread_id))
     .unwrap();
-    let ext_regex = match ext.as_ref().map(String::as_str) {
-        Some(ext) => Regex::new(ext),
-        None => {
-            // Handle the case where `ext` is None
-            log_with_thread(&format!("FUCK"), Some(thread_id)).unwrap();
+    let regex = match Regex::new(&config.filename_regexp) {
+        Ok(re) => re,
+        Err(e) => {
+            log_with_thread(
+                &format!("Invalid filename regex pattern '{}': {}", config.filename_regexp, e),
+                Some(thread_id),
+            ).unwrap();
             return 0;
         }
     };
-    let regex = ext_regex.unwrap();
     // Transfer each file from the source to the target directory
     let mut successful_transfers = 0;
     for filename in file_list {
@@ -978,7 +996,6 @@ fn main() {
     }
     let configs_arc = Arc::new(configs);
     let delete_arc = Arc::new(delete);
-    let ext_arc = Arc::new(ext);
 
     let total_transfers: i32 = pool.install(|| {
         configs_arc
@@ -990,7 +1007,7 @@ fn main() {
                     return 0;
                 }
                 let thread_id = rayon::current_thread_index().unwrap_or(idx);
-                transfer_files(cf, *delete_arc, ext_arc.as_ref().clone(), thread_id)
+                transfer_files(cf, *delete_arc, thread_id)
             })
             .sum()
     });
