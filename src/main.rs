@@ -586,27 +586,67 @@ const PROGRAM_NAME: &str = "iftpfm2";
 const PROGRAM_VERSION: &str = "2.0.2";
 
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::io::Read;
+use std::time::Duration;
+
+// Global flag to indicate if shutdown was requested
+static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+// Check if shutdown was requested
+pub fn is_shutdown_requested() -> bool {
+    SHUTDOWN_REQUESTED.load(Ordering::SeqCst)
+}
+
+// Signal that shutdown is requested
+fn request_shutdown() {
+    SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
+}
 
 fn check_single_instance() -> io::Result<()> {
-    // Try to connect to existing socket
     let socket_path = format!("/tmp/{}.sock", PROGRAM_NAME);
-    if UnixStream::connect(&socket_path).is_ok() {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "Another instance is already running"
-        ));
+    
+    // Try to connect to existing socket to signal shutdown
+    if let Ok(mut stream) = UnixStream::connect(&socket_path) {
+        log("Another instance is running, sending shutdown signal").unwrap();
+        
+        // Send shutdown command
+        let _ = stream.write_all(b"SHUTDOWN");
+        
+        // Wait for up to 5 seconds for the socket to disappear
+        for _ in 0..50 {
+            std::thread::sleep(Duration::from_millis(100));
+            if UnixStream::connect(&socket_path).is_err() {
+                break;
+            }
+        }
+        
+        // If socket still exists, forcibly remove it
+        if UnixStream::connect(&socket_path).is_ok() {
+            log("Existing instance did not shut down in time, forcing removal of socket").unwrap();
+            let _ = std::fs::remove_file(&socket_path);
+        }
+    } else {
+        // Clean up any stale socket file
+        let _ = std::fs::remove_file(&socket_path);
     }
-
-    // Clean up any stale socket file
-    let _ = std::fs::remove_file(&socket_path);
     
     // Create new listener
     let listener = UnixListener::bind(&socket_path)?;
     
-    // Spawn a thread to keep the socket alive
+    // Spawn a thread to listen for shutdown signals
     std::thread::spawn(move || {
-        for _ in listener.incoming() {
-            // Just keep the socket open
+        for stream in listener.incoming() {
+            if let Ok(mut stream) = stream {
+                let mut buffer = [0; 8];
+                if let Ok(size) = stream.read(&mut buffer) {
+                    if size >= 8 && &buffer[0..8] == b"SHUTDOWN" {
+                        log("Received shutdown signal from new instance").unwrap();
+                        request_shutdown();
+                        break;
+                    }
+                }
+            }
         }
     });
 
@@ -662,16 +702,27 @@ fn main() {
             .par_iter()
             .enumerate()
             .map(|(idx, cf)| {
+                // Check for shutdown before starting each config
+                if is_shutdown_requested() {
+                    return 0;
+                }
                 let thread_id = rayon::current_thread_index().unwrap_or(idx);
                 transfer_files(cf, *delete_arc, ext_arc.as_ref().clone(), thread_id)
             })
             .sum()
     });
 
-    log(format!(
-        "{} version {} finished, successfully transferred {} file(s)",
-        PROGRAM_NAME, PROGRAM_VERSION, total_transfers
-    )
-    .as_str())
-    .unwrap();
+    let exit_message = if is_shutdown_requested() {
+        format!(
+            "{} version {} terminated due to shutdown request, transferred {} file(s)",
+            PROGRAM_NAME, PROGRAM_VERSION, total_transfers
+        )
+    } else {
+        format!(
+            "{} version {} finished, successfully transferred {} file(s)",
+            PROGRAM_NAME, PROGRAM_VERSION, total_transfers
+        )
+    };
+    
+    log(&exit_message).unwrap();
 }
