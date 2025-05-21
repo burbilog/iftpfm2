@@ -600,6 +600,7 @@ const PROGRAM_VERSION: &str = "2.0.2";
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::process::Command;
+use std::io::Read;
 
 // Global flag to indicate if shutdown was requested
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
