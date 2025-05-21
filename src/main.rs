@@ -3,8 +3,7 @@ use chrono::Local;
 use ftp::FtpStream;
 use regex::Regex;
 use std::env;
-use std::fs::{self, File, OpenOptions};
-use std::os::unix::fs::PermissionsExt;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::path::Path;
@@ -585,7 +584,6 @@ const PROGRAM_NAME: &str = "iftpfm2";
 const PROGRAM_VERSION: &str = "2.0.2";
 
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::time::Duration;
 
 fn check_single_instance() -> io::Result<()> {
     // Try to connect to existing socket
