@@ -3,7 +3,8 @@ use chrono::Local;
 use ftp::FtpStream;
 use regex::Regex;
 use std::env;
-use std::fs::{self, File, OpenOptions, Permissions};
+use std::fs::{self, File, OpenOptions};
+use std::os::unix::fs::PermissionsExt;
 use std::io::{self, Write};
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::path::Path;
@@ -592,7 +593,7 @@ fn check_single_instance() -> io::Result<()> {
     fs::create_dir_all(&lock_dir)?;
     
     // Set restrictive permissions (rwx------)
-    fs::set_permissions(&lock_dir, fs::Permissions::from_mode(0o700))?;
+    fs::set_permissions(&lock_dir, std::fs::Permissions::from_mode(0o700))?;
     
     let lock_file = format!("{}/lock.pid", lock_dir);
     
@@ -618,7 +619,7 @@ fn check_single_instance() -> io::Result<()> {
     // Create new lock file with restrictive permissions
     let mut file = fs::File::create(&lock_file)?;
     file.write_all(process::id().to_string().as_bytes())?;
-    fs::set_permissions(&lock_file, fs::Permissions::from_mode(0o600))?;
+    fs::set_permissions(&lock_file, std::fs::Permissions::from_mode(0o600))?;
     
     Ok(())
 }
