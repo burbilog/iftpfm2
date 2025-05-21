@@ -56,6 +56,7 @@ To use iftpfm2, you need to create a configuration file that specifies the conne
 ~~~
 # This is a comment
 ip_address_from,port_from,login_from,password_from,path_from,ip_address_to,port_to,login_to,password_to,path_to,min_age_secs
+~~~
 
 Where:
 - `ip_address_from`: Source FTP server hostname/IP (string)
@@ -80,7 +81,6 @@ File filtering behavior:
 - Files are then filtered by:
   - Minimum age (specified in config file)
   - Regular expression pattern (via -x command line option, default matches .xml files)
-~~~
 
 - ip_address_from is the IP address of the FTP server to transfer files from.
 - port_from is the port number of the FTP server to transfer files from.
