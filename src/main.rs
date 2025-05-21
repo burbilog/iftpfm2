@@ -957,7 +957,7 @@ fn cleanup_lock_file() {
 /// - 1: Error during initialization
 fn main() {
     // Parse arguments first to setup logging
-    let (delete, log_file, config_file, _ext, parallel, randomize) = parse_args();
+    let (delete, log_file, config_file, parallel, randomize) = parse_args();
     if let Some(log_file) = log_file {
         set_log_file(log_file);
     }
