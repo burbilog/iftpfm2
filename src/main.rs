@@ -639,6 +639,12 @@ fn kill_process_with_socket(socket_path: &str) -> io::Result<()> {
     
     log(&format!("Found old instance with PID {}, terminating it", pid_str)).unwrap();
     
+    // Set the shutdown flag for our own process if we're killing ourselves
+    let our_pid = std::process::id().to_string();
+    if pid_str == our_pid {
+        request_shutdown();
+    }
+    
     // Kill the process
     let kill_output = Command::new("kill")
         .arg("-9")  // SIGKILL for immediate termination
@@ -687,11 +693,18 @@ fn check_single_instance() -> io::Result<()> {
     let mut pid_file = File::create(format!("/tmp/{}.pid", PROGRAM_NAME))?;
     pid_file.write_all(pid.as_bytes())?;
     
-    // Spawn a thread to keep the socket alive
+    // Spawn a thread to keep the socket alive and listen for signals
     std::thread::spawn(move || {
         for stream in listener.incoming() {
-            if let Ok(_) = stream {
-                // Just keep the socket open
+            if let Ok(mut stream) = stream {
+                let mut buffer = [0; 8];
+                if let Ok(size) = stream.read(&mut buffer) {
+                    if size >= 8 && &buffer[0..8] == b"SHUTDOWN" {
+                        log("Received shutdown signal").unwrap();
+                        request_shutdown();
+                        break;
+                    }
+                }
             }
         }
     });
