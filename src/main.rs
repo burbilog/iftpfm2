@@ -126,17 +126,6 @@ pub struct Config {
     pub path_to: String,
     /// Minimum file age to transfer (seconds)
     pub age: u64,
-    pub ip_address_from: String,
-    pub port_from: u16,
-    pub login_from: String,
-    pub password_from: String,
-    pub path_from: String,
-    pub ip_address_to: String,
-    pub port_to: u16,
-    pub login_to: String,
-    pub password_to: String,
-    pub path_to: String,
-    pub age: u64,
 }
 
 /// Parses configuration file into a vector of Config structs
