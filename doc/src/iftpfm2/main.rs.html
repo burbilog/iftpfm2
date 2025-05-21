@@ -1022,11 +1022,15 @@
 <a href="#1022" id="1022">1022</a>
 <a href="#1023" id="1023">1023</a>
 <a href="#1024" id="1024">1024</a>
+<a href="#1025" id="1025">1025</a>
+<a href="#1026" id="1026">1026</a>
+<a href="#1027" id="1027">1027</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! FTP File Mover Utility
 //!
 //! A multi-threaded tool for transferring files between FTP servers with:
 //! - Configurable parallel transfers
-//! - Age-based file filtering  
+//! - Age-based file filtering
+//! - Regexp-based file filtering
 //! - Graceful shutdown handling
 //! - Comprehensive logging
 //!
@@ -1300,7 +1304,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_parse_config() {
-        <span class="kw">let </span>config_string = <span class="string">"192.168.0.1,22,user1,password1,/path/to/files/*,192.168.0.2,22,user2,password2,/path/to/files2,30\n192.168.0.3,22,user3,password3,/path/to/files3/*,192.168.0.4,22,user4,password4,/path/to/files4,60"</span>;
+        <span class="kw">let </span>config_string = <span class="string">"192.168.0.1,22,user1,password1,/path/to/files/*,192.168.0.2,22,user2,password2,/path/to/files2,30,.*\n192.168.0.3,22,user3,password3,/path/to/files3/*,192.168.0.4,22,user4,password4,/path/to/files4,60,.*"</span>;
         <span class="kw">let </span>expected = <span class="macro">vec!</span>[
             Config {
                 ip_address_from: <span class="string">"192.168.0.1"</span>.to_string(),
@@ -1314,6 +1318,7 @@
                 password_to: <span class="string">"password2"</span>.to_string(),
                 path_to: <span class="string">"/path/to/files2"</span>.to_string(),
                 age: <span class="number">30</span>,
+                filename_regexp: <span class="string">".*"</span>.to_string(),
             },
             Config {
                 ip_address_from: <span class="string">"192.168.0.3"</span>.to_string(),
@@ -1327,6 +1332,7 @@
                 password_to: <span class="string">"password4"</span>.to_string(),
                 path_to: <span class="string">"/path/to/files4"</span>.to_string(),
                 age: <span class="number">60</span>,
+                filename_regexp: <span class="string">".*"</span>.to_string(),
             },
         ];
 

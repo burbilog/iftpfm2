@@ -2,7 +2,8 @@
 //!
 //! A multi-threaded tool for transferring files between FTP servers with:
 //! - Configurable parallel transfers
-//! - Age-based file filtering  
+//! - Age-based file filtering
+//! - Regexp-based file filtering
 //! - Graceful shutdown handling
 //! - Comprehensive logging
 //!
