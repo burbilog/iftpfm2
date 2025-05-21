@@ -601,6 +601,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::process::Command;
 use std::io::Read;
+use ctrlc;
 
 // Global flag to indicate if shutdown was requested
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -615,8 +616,8 @@ fn request_shutdown() {
     SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
 }
 
-// Find and kill process that has the socket open
-fn kill_process_with_socket(socket_path: &str) -> io::Result<()> {
+// Signal the existing process to terminate gracefully
+fn signal_process_to_terminate(socket_path: &str) -> io::Result<()> {
     // Use lsof to find process using the socket
     let output = Command::new("lsof")
         .arg("-t")  // Output only PID
@@ -638,30 +639,66 @@ fn kill_process_with_socket(socket_path: &str) -> io::Result<()> {
         ));
     }
     
-    log(&format!("Found old instance with PID {}, terminating it", pid_str)).unwrap();
+    log(&format!("Found old instance with PID {}, sending termination signal", pid_str)).unwrap();
     
-    // Set the shutdown flag for our own process if we're killing ourselves
+    // Set the shutdown flag for our own process if we're signaling ourselves
     let our_pid = std::process::id().to_string();
     if pid_str == our_pid {
         request_shutdown();
+        return Ok(());
     }
     
-    // Kill the process
+    // Send SIGTERM to allow graceful shutdown
+    let term_output = Command::new("kill")
+        .arg("-15")  // SIGTERM for graceful termination
+        .arg(&pid_str)
+        .output()?;
+    
+    if !term_output.status.success() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to send termination signal to process {}", pid_str)
+        ));
+    }
+    
+    log(&format!("Successfully sent termination signal to old instance with PID {}", pid_str)).unwrap();
+    
+    // Wait for up to 5 seconds for the process to terminate
+    for i in 1..=10 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        
+        // Check if the process is still running
+        let check_output = Command::new("kill")
+            .arg("-0")  // Check if process exists
+            .arg(&pid_str)
+            .output()?;
+            
+        if !check_output.status.success() {
+            log(&format!("Old instance with PID {} has terminated gracefully", pid_str)).unwrap();
+            return Ok(());
+        }
+        
+        if i % 2 == 0 {
+            log(&format!("Waiting for old instance with PID {} to terminate ({} seconds)...", 
+                pid_str, i/2)).unwrap();
+        }
+    }
+    
+    // If process didn't terminate after timeout, use SIGKILL as last resort
+    log(&format!("Old instance with PID {} did not terminate gracefully, forcing termination", pid_str)).unwrap();
     let kill_output = Command::new("kill")
-        .arg("-9")  // SIGKILL for immediate termination
+        .arg("-9")  // SIGKILL for forced termination
         .arg(&pid_str)
         .output()?;
     
     if !kill_output.status.success() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Failed to kill process {}", pid_str)
+            format!("Failed to force termination of process {}", pid_str)
         ));
     }
     
-    log(&format!("Successfully terminated old instance with PID {}", pid_str)).unwrap();
-    
-    // Give the system a moment to release resources
+    log(&format!("Forcibly terminated old instance with PID {}", pid_str)).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
     
     Ok(())
@@ -672,11 +709,12 @@ fn check_single_instance() -> io::Result<()> {
     
     // Try to connect to existing socket
     if UnixStream::connect(&socket_path).is_ok() {
-        log("Another instance is running, forcibly terminating it").unwrap();
+        log(&format!("Another instance is running, new instance PID {} requesting graceful termination", 
+            std::process::id())).unwrap();
         
-        // Try to kill the process that has the socket open
-        if let Err(e) = kill_process_with_socket(&socket_path) {
-            log(&format!("Failed to kill old process: {}", e)).unwrap();
+        // Try to signal the process to terminate gracefully
+        if let Err(e) = signal_process_to_terminate(&socket_path) {
+            log(&format!("Failed to signal old process: {}", e)).unwrap();
         }
         
         // Clean up the socket file regardless
@@ -694,6 +732,13 @@ fn check_single_instance() -> io::Result<()> {
     let mut pid_file = File::create(format!("/tmp/{}.pid", PROGRAM_NAME))?;
     pid_file.write_all(pid.as_bytes())?;
     
+    // Set up signal handler for SIGTERM
+    let our_pid = std::process::id();
+    ctrlc::set_handler(move || {
+        log(&format!("Received termination signal, PID {} shutting down gracefully", our_pid)).unwrap();
+        request_shutdown();
+    }).expect("Error setting signal handler");
+    
     // Spawn a thread to keep the socket alive and listen for signals
     std::thread::spawn(move || {
         for stream in listener.incoming() {
@@ -701,7 +746,7 @@ fn check_single_instance() -> io::Result<()> {
                 let mut buffer = [0; 8];
                 if let Ok(size) = stream.read(&mut buffer) {
                     if size >= 8 && &buffer[0..8] == b"SHUTDOWN" {
-                        log("Received shutdown signal").unwrap();
+                        log(&format!("Received shutdown signal from new instance")).unwrap();
                         request_shutdown();
                         break;
                     }
