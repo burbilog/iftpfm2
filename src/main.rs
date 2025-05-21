@@ -12,20 +12,22 @@ use std::process;
 use std::str::FromStr;
 use std::time::SystemTime;
 use once_cell::sync::Lazy;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
+use rayon::prelude::*;
 
 fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-x \".*\\.xml\"] [-l logfile] config_file",
+        "Usage: {} [-h] [-v] [-d] [-x \".*\\.xml\"] [-l logfile] [-p parallel] config_file",
         PROGRAM_NAME
     );
 }
 
-pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
+pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, usize) {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
     let mut ext = None;
+    let mut parallel = 1;
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -43,6 +45,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
             "-d" => delete = true,
             "-l" => log_file = Some(args.next().expect("Missing log file argument")),
             "-x" => ext = Some(args.next().expect("Missing matching regexp argument")),
+            "-p" => parallel = args.next().expect("Missing parallel count argument").parse().expect("Parallel count must be a number"),
             _ => {
                 config_file = Some(arg);
             }
@@ -59,7 +62,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>) {
         ext = Some(".*\\.xml".to_string());
     }
 
-    (delete, log_file, config_file, ext)
+    (delete, log_file, config_file, ext, parallel)
 }
 
 #[derive(Debug, PartialEq)]
@@ -589,10 +592,23 @@ fn main() {
 
     let mut total_transfers = 0;
 
-    // Loop over each line in config file
-    for cf in configs {
-        total_transfers = total_transfers + transfer_files(&cf, delete, ext.clone());
-    }
+    // Create thread pool with specified parallelism
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(parallel)
+        .build()
+        .unwrap();
+
+    // Process configs in parallel
+    let configs_arc = Arc::new(configs);
+    let delete_arc = Arc::new(delete);
+    let ext_arc = Arc::new(ext);
+
+    total_transfers = pool.install(|| {
+        configs_arc
+            .par_iter()
+            .map(|cf| transfer_files(cf, *delete_arc, ext_arc.as_ref().clone()))
+            .sum()
+    });
 
     log(format!(
         "{} version {} finished, successfully transferred {} file(s)",
