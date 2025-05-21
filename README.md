@@ -5,6 +5,8 @@ iftpfm2
 
 I had no prior knowledge of Rust before creating this tool. This program was written primarily by ChatGPT, who was able to quickly implement the necessary features by following my instructions in plain English. I was surprised at how smoothly the process went, considering it was my first time using Rust, thanks to ChatGPT, answering a lot of fucking stupid questions and doing all the heavy lifting for me.
 
+Later improvements and refinements were made with the help of Sonnet and DeepSeek, who helped polish the documentation and fix subtle issues in the code.
+
 Installation
 ============
 
