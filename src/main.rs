@@ -617,7 +617,13 @@ fn cleanup_lock_file() {
 }
 
 fn main() {
-    // Check for single instance
+    // Parse arguments first to setup logging
+    let (delete, log_file, config_file, ext, parallel) = parse_args();
+    if let Some(log_file) = log_file {
+        set_log_file(log_file);
+    }
+
+    // Check for single instance after logging is configured
     if let Err(e) = check_single_instance() {
         log(&format!("Error: {}", e)).unwrap();
         process::exit(1);
@@ -625,12 +631,6 @@ fn main() {
     
     // Ensure lock file is removed on normal exit
     let _cleanup = scopeguard::guard((), |_| cleanup_lock_file());
-
-    // Parse arguments and setup logging
-    let (delete, log_file, config_file, ext, parallel) = parse_args();
-    if let Some(log_file) = log_file {
-        set_log_file(log_file);
-    }
 
     log(format!("{} version {} started", PROGRAM_NAME, PROGRAM_VERSION).as_str()).unwrap();
 
