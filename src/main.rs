@@ -335,11 +335,11 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     {
         Ok(ftp) => ftp,
         Err(e) => {
-            log(format!(
+            log_with_thread(format!(
                 "Error connecting to SOURCE FTP server {}: {}",
                 config.ip_address_from, e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             return 0;
         }
@@ -347,22 +347,22 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     ftp_from
         .login(config.login_from.as_str(), config.password_from.as_str())
         .unwrap_or_else(|e| {
-            log(format!(
+            log_with_thread(format!(
                 "Error logging into SOURCE FTP server {}: {}",
                 config.ip_address_from, e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             return;
         });
     match ftp_from.cwd(config.path_from.as_str()) {
         Ok(_) => (),
         Err(e) => {
-            log(format!(
+            log_with_thread(format!(
                 "Error changing directory on SOURCE FTP server {}: {}",
                 config.ip_address_from, e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             return 0;
         }
@@ -372,11 +372,11 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     let mut ftp_to = match FtpStream::connect((config.ip_address_to.as_str(), config.port_to)) {
         Ok(ftp) => ftp,
         Err(e) => {
-            log(format!(
+            log_with_thread(format!(
                 "Error connecting to TARGET FTP server {}: {}",
                 config.ip_address_to, e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             return 0;
         }
@@ -384,22 +384,22 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     ftp_to
         .login(config.login_to.as_str(), config.password_to.as_str())
         .unwrap_or_else(|e| {
-            log(format!(
+            log_with_thread(format!(
                 "Error logging into TARGET FTP server {}: {}",
                 config.ip_address_to, e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             return;
         });
     match ftp_to.cwd(config.path_to.as_str()) {
         Ok(_) => (),
         Err(e) => {
-            log(format!(
+            log_with_thread(format!(
                 "Error changing directory on TARGET FTP server {}: {}",
                 config.ip_address_to, e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             return 0;
         }
@@ -410,22 +410,22 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     let file_list = match ftp_from.nlst(None) {
         Ok(list) => list,
         Err(e) => {
-            log(format!("Error getting file list from SOURCE FTP server: {}", e).as_str()).unwrap();
+            log_with_thread(format!("Error getting file list from SOURCE FTP server: {}", e).as_str(), Some(thread_id)).unwrap();
             return 0;
         }
     };
     let number_of_files = file_list.len();
-    log(format!(
+    log_with_thread(format!(
         "Number of files retrieved from SOURCE FTP server: {}",
         file_list.len()
     )
-    .as_str())
+    .as_str(), Some(thread_id))
     .unwrap();
     let ext_regex = match ext.as_ref().map(String::as_str) {
         Some(ext) => Regex::new(ext),
         None => {
             // Handle the case where `ext` is None
-            log(&format!("FUCK")).unwrap();
+            log_with_thread(&format!("FUCK"), Some(thread_id)).unwrap();
             return 0;
         }
     };
@@ -434,11 +434,11 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
     let mut successful_transfers = 0;
     for filename in file_list {
         if !regex.is_match(&filename) {
-            log(format!(
+            log_with_thread(format!(
                 "Skipping file {} as it did not match regex {}",
                 filename, regex
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             continue;
         }
@@ -452,11 +452,11 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
             }
             Err(e) => {
                 //log(&format!("Error getting modified time for file(?) '{}': '{}', skipping", filename, e)).unwrap();
-                log(&format!(
+                log_with_thread(&format!(
                     "Error getting modified time, skipping file(?) '{}': {}",
                     filename,
                     e.to_string().replace("\n", "")
-                ))
+                ), Some(thread_id))
                 .unwrap();
                 continue;
             }
@@ -468,10 +468,10 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
         ) {
             Ok(time) => time.into(),
             Err(err) => {
-                log(&format!(
+                log_with_thread(&format!(
                     "Error parsing modified time '{}': {}",
                     modified_time_str, err
-                ))
+                ), Some(thread_id))
                 .unwrap();
                 continue;
             }
@@ -484,10 +484,10 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
         let file_age = match SystemTime::now().duration_since(modified_time) {
             Ok(duration) => duration.as_secs(),
             Err(_) => {
-                log(&format!(
+                log_with_thread(&format!(
                     "Error calculating age for file '{}', skipping",
                     filename
-                ))
+                ), Some(thread_id))
                 .unwrap();
                 continue;
             }
@@ -495,39 +495,39 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
 
         // Skip the file if it is younger than the specified age
         if file_age < (config.age as u64) {
-            log(format!(
+            log_with_thread(format!(
                 "Skipping file {}, it is {} seconds old, less than specified age {} seconds",
                 filename, file_age, config.age
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             continue;
         }
         //log(format!("Transferring file {}", filename).as_str()).unwrap();
         match ftp_to.rm(filename.as_str()) {
             Ok(_) => {
-                log(format!("Deleted file {} at TARGET FTP server", filename).as_str()).unwrap()
+                log_with_thread(format!("Deleted file {} at TARGET FTP server", filename).as_str(), Some(thread_id)).unwrap()
             }
             Err(_) => (),
         };
 
         // Set binary mode for both FTP connections
         if let Err(e) = ftp_from.transfer_type(ftp::types::FileType::Binary) {
-            log(format!(
+            log_with_thread(format!(
                 "Error setting binary mode on SOURCE FTP server: {}",
                 e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             continue;
         }
 
         if let Err(e) = ftp_to.transfer_type(ftp::types::FileType::Binary) {
-            log(format!(
+            log_with_thread(format!(
                 "Error setting binary mode on TARGET FTP server: {}",
                 e
             )
-            .as_str())
+            .as_str(), Some(thread_id))
             .unwrap();
             continue;
         }
@@ -535,25 +535,25 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
         match ftp_from.simple_retr(filename.as_str()) {
             Ok(mut data) => match ftp_to.put(filename.as_str(), &mut data) {
                 Ok(_) => {
-                    log(format!("Successful transfer of file {}", filename).as_str()).unwrap();
+                    log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id)).unwrap();
                     successful_transfers += 1;
                 }
                 Err(e) => {
-                    log(format!(
+                    log_with_thread(format!(
                         "Error transferring file {} to TARGET FTP server: {}",
                         filename, e
                     )
-                    .as_str())
+                    .as_str(), Some(thread_id))
                     .unwrap();
                     continue;
                 }
             },
             Err(e) => {
-                log(format!(
+                log_with_thread(format!(
                     "Error transferring file {} from SOURCE FTP server: {}",
                     filename, e
                 )
-                .as_str())
+                .as_str(), Some(thread_id))
                 .unwrap();
                 continue;
             }
@@ -563,20 +563,20 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
         if delete {
             match ftp_from.rm(filename.as_str()) {
                 Ok(_) => {
-                    log(format!("Deleted SOURCE file {}", filename).as_str()).unwrap();
+                    log_with_thread(format!("Deleted SOURCE file {}", filename).as_str(), Some(thread_id)).unwrap();
                 }
                 Err(e) => {
-                    log(format!("Error deleting SOURCE file {}: {}", filename, e).as_str())
+                    log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e).as_str(), Some(thread_id))
                         .unwrap();
                 }
             }
         }
     }
-    log(format!(
+    log_with_thread(format!(
         "Successfully transferred {} files out of {}",
         successful_transfers, number_of_files
     )
-    .as_str())
+    .as_str(), Some(thread_id))
     .unwrap();
     successful_transfers
 }
