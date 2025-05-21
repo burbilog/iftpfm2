@@ -579,7 +579,7 @@ const PROGRAM_VERSION: &str = "2.0.2";
 
 fn main() {
     // Parse arguments and setup logging
-    let (delete, log_file, config_file, ext) = parse_args();
+    let (delete, log_file, config_file, ext, parallel) = parse_args();
     if let Some(log_file) = log_file {
         set_log_file(log_file);
     }
@@ -594,7 +594,7 @@ fn main() {
 
     // Create thread pool with specified parallelism
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(parallel)
+        .num_threads(parallel.max(1)) // Ensure at least 1 thread
         .build()
         .unwrap();
 
