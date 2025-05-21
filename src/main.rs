@@ -595,7 +595,7 @@ pub fn transfer_files(config: &Config, delete: bool, ext: Option<String>, thread
 }
 
 const PROGRAM_NAME: &str = "iftpfm2";
-const PROGRAM_VERSION: &str = "2.0.2";
+const PROGRAM_VERSION: &str = "2.0.3";
 
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, Ordering};
