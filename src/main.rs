@@ -1,3 +1,19 @@
+//! FTP File Mover Utility
+//!
+//! A multi-threaded tool for transferring files between FTP servers with:
+//! - Configurable parallel transfers
+//! - Age-based file filtering  
+//! - Graceful shutdown handling
+//! - Comprehensive logging
+//!
+//! # Key Features
+//! - Single instance enforcement
+//! - Configurable file matching patterns
+//! - Random processing order option
+//! - 30-second graceful shutdown timeout
+//!
+//! See README.md for usage examples and configuration file format.
+
 use chrono::DateTime;
 use chrono::Local;
 use ftp::FtpStream;
@@ -66,8 +82,31 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, Option<String>, us
     (delete, log_file, config_file, ext, parallel, randomize)
 }
 
+/// FTP transfer configuration parameters
 #[derive(Debug, PartialEq)]
 pub struct Config {
+    /// Source FTP server IP/hostname
+    pub ip_address_from: String,
+    /// Source FTP server port (typically 21)
+    pub port_from: u16,
+    /// Username for source FTP server
+    pub login_from: String,
+    /// Password for source FTP server
+    pub password_from: String,
+    /// Source path with optional wildcard (e.g. "/files/*.xml")
+    pub path_from: String,
+    /// Destination FTP server IP/hostname  
+    pub ip_address_to: String,
+    /// Destination FTP server port (typically 21)
+    pub port_to: u16,
+    /// Username for destination FTP server
+    pub login_to: String,
+    /// Password for destination FTP server
+    pub password_to: String,
+    /// Destination directory path
+    pub path_to: String,
+    /// Minimum file age to transfer (seconds)
+    pub age: u64,
     pub ip_address_from: String,
     pub port_from: u16,
     pub login_from: String,
@@ -238,6 +277,10 @@ mod tests {
 // LOG_FILE is a thread-safe, lazily initialized global variable
 // It holds an Option<String> representing the path to the log file (if set)
 // The Mutex ensures thread-safe access to this value
+/// Global log file path protected by Mutex
+///
+/// Thread-safe storage for optional log file path.
+/// When None, logs go to stdout.
 static LOG_FILE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 /// Logs a message to either a file or stdout
@@ -253,10 +296,37 @@ static LOG_FILE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 /// # Returns
 ///
 /// * `io::Result<()>` - Ok if the logging was successful, Err otherwise
+/// Logs a message with timestamp to configured output
+///
+/// # Arguments
+/// * `message` - The message to log
+///
+/// # Returns
+/// * `io::Result<()>` - Ok on success, Err if writing fails
+///
+/// # Example
+/// ```
+/// log("Starting transfer").unwrap();
+/// ```
 pub fn log(message: &str) -> io::Result<()> {
     log_with_thread(message, None)
 }
 
+/// Logs a message with timestamp and optional thread ID
+///
+/// Used when running in parallel mode to distinguish threads
+///
+/// # Arguments
+/// * `message` - The message to log  
+/// * `thread_id` - Optional thread identifier
+///
+/// # Returns  
+/// * `io::Result<()>` - Ok on success, Err if writing fails
+///
+/// # Example
+/// ```
+/// log_with_thread("Thread started", Some(1)).unwrap();
+/// ```
 pub fn log_with_thread(message: &str, thread_id: Option<usize>) -> io::Result<()> {
     // Generate a timestamp for the log message
     let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -604,6 +674,10 @@ use std::io::Read;
 use ctrlc;
 
 // Global flag to indicate if shutdown was requested
+/// Global shutdown flag (atomic bool)
+///
+/// Set to true when shutdown is requested via signal.
+/// Threads should check this flag regularly and exit cleanly.
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 // Check if shutdown was requested
