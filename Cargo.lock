@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "iftpfm2"
-version = "2.0.4"
+version = "2.0.5"
 dependencies = [
  "chrono 0.4.23",
  "csv",
