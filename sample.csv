@@ -17,8 +17,8 @@
 # age: the age in seconds of the files to transfer, files younger than age seconds are ignored
 # filename_regexp: regular expression pattern to match files in specified source path (string)
 
-# This is a single config to transfer all files older than 1 day from 192.168.0.1 to 192.168.0.2
-192.168.0.1,21,user1,password1,/path/to/files/,192.168.0.2,21,user2,password2,/path/to/files,86400,.*
+# This is a config line to transfer all files older than 1 day from 192.168.0.1 to 192.168.0.2
+192.168.0.1,21,user1,password1,/path/to/source/dir/,192.168.0.2,21,user2,password2,/path/to/target/dir,86400,.*
 
-# This is a single config to transfer all .txt files older than 1 week from 192.168.0.3 to 192.168.0.4
-192.168.0.3,21,user3,password3,/path/to/files/,192.168.0.4,21,user4,password4,/path/to/files,604800,.*\.txt$
+# This is a config line to transfer all .txt files older than 1 week from 192.168.0.3 to 192.168.0.4
+192.168.0.3,21,user3,password3,/path/to/source/dir/,192.168.0.4,21,user4,password4,/path/to/target/dir,604800,.*\.txt$
