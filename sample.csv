@@ -3,7 +3,7 @@
 # Each line represents a single transfer configuration
 # Lines starting with '#' are comments and are ignored
 # The config file is a CSV with the following fields:
-# ip_address_from, port_from, login_from, password_from, path_from, ip_address_to, port_to, login_to, password_to, path_to, age
+# ip_address_from, port_from, login_from, password_from, path_from, ip_address_to, port_to, login_to, password_to, path_to, age, filename_regexp
 # ip_address_from: the IP address of the FTP server to transfer files from
 # port_from: the port of the FTP server to transfer files from
 # login_from: the login to use to connect to the FTP server to transfer files from
@@ -15,9 +15,10 @@
 # password_to: the password to use to connect to the FTP server to transfer files to
 # path_to: the path on the FTP server to transfer files to
 # age: the age in seconds of the files to transfer, files younger than age seconds are ignored
+# filename_regexp: regular expression pattern to match files in specified source path (string)
 
 # This is a single config to transfer all files older than 1 day from 192.168.0.1 to 192.168.0.2
-192.168.0.1,21,user1,password1,/path/to/files/*,192.168.0.2,21,user2,password2,/path/to/files,86400
+192.168.0.1,21,user1,password1,/path/to/files/,192.168.0.2,21,user2,password2,/path/to/files,86400,.*
 
 # This is a single config to transfer all .txt files older than 1 week from 192.168.0.3 to 192.168.0.4
-192.168.0.3,21,user3,password3,/path/to/files/*.txt,192.168.0.4,21,user4,password4,/path/to/files,604800
+192.168.0.3,21,user3,password3,/path/to/files/,192.168.0.4,21,user4,password4,/path/to/files,604800,.*\.txt$
