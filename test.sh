@@ -22,16 +22,13 @@ echo "test2" > /tmp/ftp1/test2.txt
 echo "test3" > /tmp/ftp1/test3.txt
 
 echo Creating config file for iftpfm2, age is 1 second
-echo "localhost,2121,u1,p1,/,localhost,2122,u2,p2,/,1" > /tmp/config.txt
+echo "localhost,2121,u1,p1,/,localhost,2122,u2,p2,/,1,.*\\.txt" > /tmp/config.txt
 
 echo Waiting 2 seconds to expire the age
 sleep 2
 
-echo Running iftpfm2 without file pattern so it uses default ".*\.xml", resulting in no transfers for txt files
-./target/debug/iftpfm2 /tmp/config.txt
-
-echo Running iftpfm2 using the config file, the -d option to delete source files and -x to match txt files
-./target/debug/iftpfm2 -d -x ".*\.txt" /tmp/config.txt
+echo Running iftpfm2 using the config file, the -d option to delete source files
+./target/debug/iftpfm2 -d /tmp/config.txt
 
 echo Ensure that the files were moved to the second servers directory and deleted from the source server
 echo
