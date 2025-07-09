@@ -17,6 +17,7 @@ release:
 # run unit tests
 test:
 	cargo test
+	./test.sh
 
 # generate and install rust documentation (always rebuilds)
 .PHONY: doc
