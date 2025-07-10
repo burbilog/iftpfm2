@@ -77,9 +77,10 @@ pub fn log_with_thread(message: &str, thread_id: Option<usize>) -> io::Result<()
             file.write_all(log_message.as_bytes())?;
         }
         None => {
-            // If no log file is set, print the message to stdout
-            // Ensure to print the full log_message which includes the newline
-            print!("{}", log_message);
+            // If no log file is set, print the message to stdout.
+            // The original code used println!() with a message already ending in \n,
+            // resulting in a double newline. Restoring that behavior.
+            println!("{}", log_message);
         }
     }
 

@@ -1,10 +1,9 @@
 use crate::config::Config;
 use crate::logging::log_with_thread;
 use crate::shutdown::is_shutdown_requested;
-// Removed chrono imports as they are no longer directly used here for DateTime/Utc types
 use ftp::FtpStream;
 use regex::Regex;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH}; // Moved Duration and UNIX_EPOCH here
 
 /// Transfers files between FTP servers according to configuration
 ///
@@ -192,7 +191,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
         // Convert ftp_chrono::DateTime<Utc> to SystemTime for age calculation.
         // datetime_utc_ftp_chrono is from chrono 0.2.x via the ftp crate.
         let modified_system_time = {
-            use std::time::{Duration, UNIX_EPOCH};
+            // Duration and UNIX_EPOCH are now imported at the top of the file.
             let secs = datetime_utc_ftp_chrono.timestamp();
             let nanos = datetime_utc_ftp_chrono.timestamp_subsec_nanos(); // This is u32 in chrono 0.2.x
             if secs < 0 {

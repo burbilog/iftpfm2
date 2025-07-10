@@ -1,5 +1,5 @@
-use crate::logging::log; // TODO: Update once lib.rs is set up
-use crate::shutdown::request_shutdown; // TODO: Update once lib.rs is set up
+use crate::logging::log;
+use crate::shutdown::request_shutdown;
 
 use std::fs::File;
 use std::io::{self, Write, Read};

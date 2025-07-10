@@ -24,11 +24,11 @@ pub fn print_usage() {
 /// # Returns
 /// A tuple containing:
 /// - `bool`: Whether to delete source files after transfer
-/// - `Option<String>`: Path to log file (None for stdout)
-/// - `Option<String>`: Path to config file
-/// - `usize`: Number of parallel threads
-/// - `bool`: Whether to randomize processing order
-/// - `u64`: Grace period in seconds for shutdown
+/// - `Option<String>`: Path to log file (None for stdout).
+/// - `Option<String>`: Path to config file.
+/// - `usize`: Number of parallel threads.
+/// - `bool`: Whether to randomize processing order.
+/// - `u64`: Grace period in seconds for shutdown.
 ///
 /// # Panics
 /// - If required arguments are missing

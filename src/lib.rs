@@ -52,8 +52,5 @@ pub const PROGRAM_VERSION: &str = env!("CARGO_PKG_VERSION");
 // Functions like `parse_config` must be `pub fn parse_config`.
 // Statics like `LOG_FILE` in `logging.rs` must be `pub static LOG_FILE`.
 
-// The `cli.rs` and `instance.rs` files had temporary const declarations for PROGRAM_NAME.
-// These should be removed, and they should use `crate::PROGRAM_NAME` once this lib.rs is active.
-// I'll make that adjustment in a subsequent step if `cargo check` reveals it's necessary,
-// or as part of the `main.rs` refactoring.
-// For now, this lib.rs structure is the main goal.
+// Note: The temporary const declarations for PROGRAM_NAME in cli.rs and instance.rs
+// were removed, and those modules now use `crate::PROGRAM_NAME` as intended.
