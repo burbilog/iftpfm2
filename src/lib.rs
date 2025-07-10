@@ -29,7 +29,7 @@ pub const PROGRAM_NAME: &str = "iftpfm2";
 
 /// Current version of the program (from Cargo.toml)
 /// Follows semantic versioning (MAJOR.MINOR.PATCH)
-pub const PROGRAM_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const PROGRAM_VERSION: &str = "2.0.6";
 
 // Dependencies that were in main.rs and are used by multiple modules,
 // or are fundamental to the library's operation, can be listed here
