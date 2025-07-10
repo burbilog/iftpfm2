@@ -16,6 +16,7 @@ release:
 
 # run unit tests
 test:
+	cargo build # Ensure binary is built before testing
 	cargo test
 	./test.sh
 
