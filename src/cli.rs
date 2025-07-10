@@ -1,14 +1,6 @@
 use std::env;
 use std::process;
 
-// These will be moved to lib.rs later and accessed via crate::
-// For now, define them here to avoid compilation errors during refactoring steps.
-// These will be moved to lib.rs later and accessed via crate::
-// For now, define them here to avoid compilation errors during refactoring steps.
-// const PROGRAM_NAME: &str = "iftpfm2";
-// const PROGRAM_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-
 /// Prints usage instructions for the program.
 ///
 /// Uses `PROGRAM_NAME` constant from `crate` for the executable name.

@@ -7,10 +7,6 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use ctrlc;
 
-// This will be moved to lib.rs later and accessed via crate::
-// For now, define it here to avoid compilation errors during refactoring steps.
-// const PROGRAM_NAME: &str = "iftpfm2"; // Will use crate::PROGRAM_NAME from lib.rs
-
 // Signal the existing process to terminate gracefully
 fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Result<()> {
     // Use lsof to find process using the socket
