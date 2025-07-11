@@ -3,6 +3,8 @@
 # iftpfm2 test script
 # requires python3 and pyftpdlib installed
 
+cargo build
+
 mkdir /tmp/ftp1
 mkdir /tmp/ftp2
 
