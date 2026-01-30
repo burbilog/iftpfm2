@@ -44,38 +44,99 @@ cargo build --release
 
 This will compile the program and create an executable file called ifptfm2 in the target/release directory.
 
-You can then run the program by typing `./target/release/ifptfm2` followed by the appropriate command line arguments (for example: `./target/release/ifptfm2 config_file.txt`).
+You can then run the program by typing `./target/release/ifptfm2` followed by the appropriate command line arguments (for example: `./target/release/ifptfm2 config_file.jsonl`).
+
+Breaking Changes & Migration
+=============================
+
+Version 2.1.0 introduces a **breaking change** in the configuration file format.
+
+**CSV format (v2.0.6 and earlier) is no longer supported.**
+
+### What Changed?
+
+The configuration file format has changed from CSV to JSONL (JSON Lines):
+
+**Old CSV format:**
+```
+host_from,port_from,login_from,password_from,path_from,host_to,port_to,login_to,password_to,path_to,age,filename_regexp
+192.168.0.1,21,user1,pass1,/source/,192.168.0.2,21,user2,pass2,/target,86400,.*\.txt$
+```
+
+**New JSONL format:**
+```
+{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"pass1","path_from":"/source/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"pass2","path_to":"/target","age":86400,"filename_regexp":".*\\.txt$"}
+```
+
+### Why JSONL?
+
+JSONL format provides:
+- **Better extensibility**: New fields can be added without breaking existing configurations
+- **Self-documenting**: Field names are explicit in each line
+- **Better handling of complex values**: No issues with commas or special characters in values
+- **Standard format**: JSONL is a well-known format with good tooling support
+
+### How to Migrate
+
+If you have existing CSV configuration files, use the migration script:
+
+1. **Build the migration tool** (already included in the repository):
+   ~~~
+   cargo build --release --bin migrate_csv_to_jsonl
+   ~~~
+
+2. **Run the migration**:
+   ~~~
+   ./target/release/migrate_csv_to_jsonl your_old_config.csv your_new_config.jsonl
+   ~~~
+
+3. **Verify the output** and test with the new configuration:
+   ~~~
+   ./target/release/iftpfm2 your_new_config.jsonl
+   ~~~
+
+4. **Update your production** once verified
+
+### Field Name Changes
+
+The internal field names have been shortened for cleaner JSON:
+
+| Old CSV Field Name | New JSONL Field Name |
+|--------------------|---------------------|
+| ip_address_from    | host_from           |
+| ip_address_to      | host_to             |
+
+All other field names remain the same (login_from, password_from, path_from, port_from, etc.).
+
+### Need Help?
+
+See `sample.jsonl` for an example of the new format.
 
 
 
 Usage
 =====
 
-To use iftpfm2, you need to create a configuration file that specifies the connection details for the FTP servers, and the files to be transferred. The configuration file should have the following format:
+To use iftpfm2, you need to create a configuration file that specifies the connection details for the FTP servers, and the files to be transferred. The configuration file uses JSONL format (JSON Lines - one JSON object per line).
 
 ~~~
 # This is a comment
-hostfrom,portfrom,userfrom,passfrom,pathfrom,hostto,portto,userto,passto,pathto,age_seconds,filename_regexp
+{"host_from":"192.168.1.100","port_from":21,"login_from":"user1","password_from":"pass1","path_from":"/outgoing","host_to":"192.168.1.200","port_to":21,"login_to":"user2","password_to":"pass2","path_to":"/incoming","age":3600,"filename_regexp":".*\\.xml$"}
 ~~~
 
 Where:
-- `hostfrom`: Source FTP server hostname/IP (string)
-- `portfrom`: Source FTP port (number, typically 21)
-- `userfrom`: Source FTP username (string)
-- `passfrom`: Source FTP password (string)
-- `pathfrom`: Source directory path (must be literal path, no wildcards)
-- `hostto`: Destination FTP server hostname/IP (string)
-- `portto`: Destination FTP port (number, typically 21)
-- `userto`: Destination FTP username (string)
-- `passto`: Destination FTP password (string)
-- `pathto`: Destination directory path (string)
-- `age_seconds`: Minimum file age to transfer (seconds, number)
+- `host_from`: Source FTP server hostname/IP (string)
+- `port_from`: Source FTP port (number, typically 21)
+- `login_from`: Source FTP username (string)
+- `password_from`: Source FTP password (string)
+- `path_from`: Source directory path (must be literal path, no wildcards)
+- `host_to`: Destination FTP server hostname/IP (string)
+- `port_to`: Destination FTP port (number, typically 21)
+- `login_to`: Destination FTP username (string)
+- `password_to`: Destination FTP password (string)
+- `path_to`: Destination directory path (string)
+- `age`: Minimum file age to transfer (seconds, number)
 - `filename_regexp`: Regular expression pattern to match files (string)
-
-Example:
-```
-192.168.1.100,21,user1,pass1,/outgoing,192.168.1.200,21,user2,pass2,/incoming,3600,.*\.xml$
-```
 
 File filtering behavior:
 - All files in the literal source path are retrieved via FTP NLST command
@@ -125,13 +186,13 @@ Examples
 Here is an example configuration file that transfers CSV files from the /outgoing directory on the FTP server at 192.168.0.1 to the /incoming directory on the FTP server at 192.168.0.2, if they are at least one day old, filtered by age (86400 seconds) and regexp `.*\.csv$`:
 
 ```
-192.168.0.1,21,user1,password1,/outgoing,192.168.0.2,21,user2,password2,/incoming,86400,.*\.csv$
+{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/outgoing","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/incoming","age":86400,"filename_regexp":".*\\.csv$"}
 ```
 
-Add this text to config.txt and run iftpfm2 to copy files using this config file and delete source files after transfer:
+Add this text to config.jsonl and run iftpfm2 to copy files using this config file and delete source files after transfer:
 
 ```
-iftpfm2 -d config.csv
+iftpfm2 -d config.jsonl
 ```
 
 Author
