@@ -6,7 +6,7 @@ use std::process;
 /// Uses `PROGRAM_NAME` constant from `crate` for the executable name.
 pub fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] [-g grace_seconds] config_file",
+        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] [-g grace_seconds] [-t connect_timeout] config_file",
         crate::PROGRAM_NAME // Now using PROGRAM_NAME from lib.rs
     );
 }
@@ -21,6 +21,7 @@ pub fn print_usage() {
 /// - `usize`: Number of parallel threads.
 /// - `bool`: Whether to randomize processing order.
 /// - `u64`: Grace period in seconds for shutdown.
+/// - `Option<u64>`: Connection timeout in seconds (None = 30s default).
 ///
 /// # Panics
 /// - If required arguments are missing
@@ -30,13 +31,14 @@ pub fn print_usage() {
 /// ```text
 /// // let (delete, log_file, config_file, parallel, randomize, grace_seconds) = parse_args();
 /// ```
-pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64) {
+pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, Option<u64>) {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
     let mut parallel = 1;
     let mut randomize = false;
     let mut grace_seconds = 30; // Default grace period
+    let mut connect_timeout: Option<u64> = None; // Default 30 seconds will be applied in ftp_ops
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -92,6 +94,23 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64) 
                     }
                 }
             }
+            "-t" => {
+                connect_timeout = match args.next() {
+                    Some(arg) => match arg.parse::<u64>() {
+                        Ok(n) if n > 0 => Some(n),
+                        _ => {
+                            eprintln!("Error: Connect timeout must be a positive number");
+                            print_usage();
+                            process::exit(1);
+                        }
+                    },
+                    None => {
+                        eprintln!("Error: Missing connect timeout argument");
+                        print_usage();
+                        process::exit(1);
+                    }
+                }
+            }
             _ => {
                 if config_file.is_none() {
                     config_file = Some(arg);
@@ -110,5 +129,5 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64) 
         process::exit(1);
     }
 
-    (delete, log_file, config_file, parallel, randomize, grace_seconds)
+    (delete, log_file, config_file, parallel, randomize, grace_seconds, connect_timeout)
 }

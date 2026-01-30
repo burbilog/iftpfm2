@@ -4,6 +4,7 @@ use crate::shutdown::is_shutdown_requested;
 use suppaftp::{FtpStream, types::FileType};
 use regex::Regex;
 use std::io::Cursor;
+use std::net::ToSocketAddrs;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Transfers files between FTP servers according to configuration
@@ -12,6 +13,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// * `config` - FTP connection and transfer parameters
 /// * `delete` - Whether to delete source files after transfer
 /// * `thread_id` - Identifier for logging in parallel mode
+/// * `connect_timeout` - Connection timeout in seconds (None = 30s default)
 ///
 /// # Returns
 /// Number of files successfully transferred
@@ -28,7 +30,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// ```text
 /// // let count = transfer_files(&config, true, 1);
 /// ```
-pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
+pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
         let _ = log_with_thread("Shutdown requested, skipping transfer", Some(thread_id));
@@ -46,13 +48,49 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
     )
     .as_str(), Some(thread_id));
     // Connect to the source FTP server
-    let mut ftp_from = match FtpStream::connect((config.ip_address_from.as_str(), config.port_from))
-    {
-        Ok(ftp) => ftp,
+    let timeout = Duration::from_secs(connect_timeout.unwrap_or(30));
+    let addrs_result: Result<Vec<_>, _> = (config.ip_address_from.as_str(), config.port_from)
+        .to_socket_addrs()
+        .map(|a| a.collect());
+    let addrs = match addrs_result {
+        Ok(addrs) => addrs,
         Err(e) => {
             let _ = log_with_thread(format!(
-                "Error connecting to SOURCE FTP server {}: {}",
+                "Error resolving SOURCE FTP server {}: {}",
                 config.ip_address_from, e
+            )
+            .as_str(), Some(thread_id));
+            return 0;
+        }
+    };
+
+    let mut ftp_from = None;
+    let mut last_error = None;
+    for addr in addrs {
+        match FtpStream::connect_timeout(addr, timeout) {
+            Ok(ftp) => {
+                ftp_from = Some(ftp);
+                last_error = None;
+                break;
+            }
+            Err(e) => {
+                last_error = Some(e);
+            }
+        }
+    }
+
+    let mut ftp_from = match ftp_from {
+        Some(ftp) => ftp,
+        None => {
+            let error = last_error.unwrap_or_else(|| {
+                suppaftp::FtpError::ConnectionError(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "No addresses available"
+                ))
+            });
+            let _ = log_with_thread(format!(
+                "Error connecting to SOURCE FTP server {}:{} ({}s timeout): {}",
+                config.ip_address_from, config.port_from, connect_timeout.unwrap_or(30), error
             )
             .as_str(), Some(thread_id));
             return 0;
@@ -78,12 +116,49 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
     }
 
     // Connect to the target FTP server
-    let mut ftp_to = match FtpStream::connect((config.ip_address_to.as_str(), config.port_to)) {
-        Ok(ftp) => ftp,
+    let addrs_to_result: Result<Vec<_>, _> = (config.ip_address_to.as_str(), config.port_to)
+        .to_socket_addrs()
+        .map(|a| a.collect());
+    let addrs_to = match addrs_to_result {
+        Ok(addrs) => addrs,
         Err(e) => {
             let _ = log_with_thread(format!(
-                "Error connecting to TARGET FTP server {}: {}",
+                "Error resolving TARGET FTP server {}: {}",
                 config.ip_address_to, e
+            )
+            .as_str(), Some(thread_id));
+            let _ = ftp_from.quit();
+            return 0;
+        }
+    };
+
+    let mut ftp_to = None;
+    let mut last_error_to = None;
+    for addr in addrs_to {
+        match FtpStream::connect_timeout(addr, timeout) {
+            Ok(ftp) => {
+                ftp_to = Some(ftp);
+                last_error_to = None;
+                break;
+            }
+            Err(e) => {
+                last_error_to = Some(e);
+            }
+        }
+    }
+
+    let mut ftp_to = match ftp_to {
+        Some(ftp) => ftp,
+        None => {
+            let error = last_error_to.unwrap_or_else(|| {
+                suppaftp::FtpError::ConnectionError(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "No addresses available"
+                ))
+            });
+            let _ = log_with_thread(format!(
+                "Error connecting to TARGET FTP server {}:{} ({}s timeout): {}",
+                config.ip_address_to, config.port_to, connect_timeout.unwrap_or(30), error
             )
             .as_str(), Some(thread_id));
             let _ = ftp_from.quit();
@@ -356,7 +431,7 @@ mod tests {
             filename_regexp: ".*".to_string(),
         };
 
-        let result = transfer_files(&config, false, 1);
+        let result = transfer_files(&config, false, 1, None);
         assert_eq!(result, 0, "Should return 0 when shutdown requested before start");
 
         // Reset shutdown flag for other tests

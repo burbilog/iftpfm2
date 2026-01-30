@@ -31,7 +31,18 @@ python3 -m pyftpdlib -p 2122 -u u2 -P p2 -d /tmp/ftp2 -w > /dev/null 2>&1 &
 ftp2_pid=$!
 
 # Give servers time to start
-sleep 2
+echo "Waiting for FTP servers to be ready..."
+for i in {1..30}; do
+    if nc -z localhost 2121 2>/dev/null && nc -z localhost 2122 2>/dev/null; then
+        echo "FTP servers are ready!"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "ERROR: FTP servers did not start in time"
+        exit 1
+    fi
+    sleep 0.2
+done
 
 # AGE Scenario
 AGE_LIMIT=3
