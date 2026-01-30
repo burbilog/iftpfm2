@@ -20,6 +20,7 @@ test:
 	cargo test
 	./test.sh
 	./test_age.sh
+	./test_conn_timeout.sh
 
 # generate and install rust documentation (always rebuilds)
 .PHONY: doc
