@@ -44,6 +44,112 @@ pub struct Config {
     pub filename_regexp: String,
 }
 
+impl Config {
+    /// Validates configuration field values
+    ///
+    /// # Returns
+    /// * `Ok(())` if all fields are valid
+    /// * `Err(Error)` if any field is invalid
+    ///
+    /// # Validation Rules
+    /// - Host addresses must be non-empty
+    /// - Ports must be non-zero
+    /// - Logins must be non-empty
+    /// - Passwords must be non-empty
+    /// - Paths must be non-empty
+    /// - Age must be reasonable (> 0)
+    /// - Regex pattern must be valid
+    pub fn validate(&self) -> Result<(), Error> {
+        // Validate host addresses
+        if self.ip_address_from.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "host_from cannot be empty"
+            ));
+        }
+        if self.ip_address_to.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "host_to cannot be empty"
+            ));
+        }
+
+        // Validate ports
+        if self.port_from == 0 {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "port_from cannot be 0"
+            ));
+        }
+        if self.port_to == 0 {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "port_to cannot be 0"
+            ));
+        }
+
+        // Validate logins
+        if self.login_from.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "login_from cannot be empty"
+            ));
+        }
+        if self.login_to.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "login_to cannot be empty"
+            ));
+        }
+
+        // Validate passwords
+        if self.password_from.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "password_from cannot be empty"
+            ));
+        }
+        if self.password_to.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "password_to cannot be empty"
+            ));
+        }
+
+        // Validate paths
+        if self.path_from.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "path_from cannot be empty"
+            ));
+        }
+        if self.path_to.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "path_to cannot be empty"
+            ));
+        }
+
+        // Validate age
+        if self.age == 0 {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "age cannot be 0"
+            ));
+        }
+
+        // Validate regex pattern (already done in parse_config but double-check here)
+        if let Err(e) = Regex::new(&self.filename_regexp) {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!("Invalid filename_regexp pattern '{}': {}", self.filename_regexp, e)
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 /// Parses configuration file into a vector of Config structs
 ///
 /// # Arguments
@@ -94,6 +200,14 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
             Error::new(
                 ErrorKind::InvalidInput,
                 format!("invalid filename regex pattern on line {}: {}", line_num + 1, e),
+            )
+        })?;
+
+        // Validate all field values
+        config.validate().map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                format!("invalid config values on line {}: {}", line_num + 1, e),
             )
         })?;
 
@@ -190,5 +304,157 @@ mod tests {
 
         let result = parse_config(config_path.to_str().unwrap());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_config_validate_empty_host_from() {
+        let config = Config {
+            ip_address_from: "".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_zero_port_from() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 0,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_empty_login() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_empty_password() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "".to_string(),
+            path_from: "/path/".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_empty_path() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_zero_age() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 0,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_invalid_regex() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 100,
+            filename_regexp: "(invalid[".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_valid() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_ok());
     }
 }

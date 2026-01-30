@@ -1,7 +1,7 @@
 use chrono::Local;
 use once_cell::sync::Lazy;
-use std::fs::OpenOptions; // Removed 'File'
-use std::io::{self, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -13,6 +13,12 @@ use std::sync::Mutex;
 /// Thread-safe storage for optional log file path.
 /// When None, logs go to stdout.
 pub static LOG_FILE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
+/// Global cached file handle protected by Mutex
+///
+/// Thread-safe storage for optional buffered writer to log file.
+/// When None, either no log file is set or we haven't opened it yet.
+static LOG_FILE_HANDLE: Lazy<Mutex<Option<BufWriter<File>>>> = Lazy::new(|| Mutex::new(None));
 
 /// Logs a message to either a file or stdout
 ///
@@ -67,21 +73,47 @@ pub fn log_with_thread(message: &str, thread_id: Option<usize>) -> io::Result<()
     };
 
     // Lock the mutex and check if a log file has been set
-    match &*LOG_FILE.lock().unwrap() {
-        Some(log_file) => {
-            // If a log file is set, append the message to the file
-            let mut file = OpenOptions::new()
+    // Handle poisoned mutex by recovering or using a fallback
+    let log_file_result = LOG_FILE.lock();
+    let log_file_guard = match log_file_result {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            // Recover from poisoned mutex, taking the value
+            poisoned.into_inner()
+        }
+    };
+
+    // Clone the log_file path so we can drop the guard before locking LOG_FILE_HANDLE
+    let log_file_clone = log_file_guard.as_ref().cloned();
+    drop(log_file_guard);
+
+    if let Some(log_file) = log_file_clone {
+        // Lock the file handle mutex, handling poisoning
+        let handle_result = LOG_FILE_HANDLE.lock();
+        let mut handle_guard: std::sync::MutexGuard<'_, Option<BufWriter<File>>> = match handle_result {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+
+        // If handle is not yet opened or was closed, open it
+        if handle_guard.is_none() {
+            let file = OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(log_file)?;
-            file.write_all(log_message.as_bytes())?;
+            *handle_guard = Some(BufWriter::new(file));
         }
-        None => {
-            // If no log file is set, print the message to stdout.
-            // The original code used println!() with a message already ending in \n,
-            // resulting in a double newline. Restoring that behavior.
-            println!("{}", log_message);
+
+        // Write to the cached handle
+        if let Some(ref mut writer) = *handle_guard {
+            writer.write_all(log_message.as_bytes())?;
+            writer.flush()?;
         }
+    } else {
+        // If no log file is set, print the message to stdout.
+        // The original code used println!() with a message already ending in \n,
+        // resulting in a double newline. Restoring that behavior.
+        println!("{}", log_message);
     }
 
     Ok(())
@@ -98,7 +130,23 @@ pub fn log_with_thread(message: &str, thread_id: Option<usize>) -> io::Result<()
 pub fn set_log_file<P: AsRef<Path>>(path: P) {
     // Convert the path to a string and update the LOG_FILE
     let path_str = path.as_ref().to_str().expect("Path is not valid UTF-8");
-    *LOG_FILE.lock().unwrap() = Some(path_str.to_string());
+
+    // Update the log file path, handling poisoned mutex
+    let result = LOG_FILE.lock();
+    let mut guard = match result {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    *guard = Some(path_str.to_string());
+    drop(guard);
+
+    // Clear any cached file handle since the path has changed
+    let result = LOG_FILE_HANDLE.lock();
+    let mut handle_guard: std::sync::MutexGuard<'_, Option<BufWriter<File>>> = match result {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    *handle_guard = None;
 }
 
 #[cfg(test)]
@@ -111,8 +159,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_log_to_file() {
-        // Reset LOG_FILE before test to ensure clean state
+        // Reset LOG_FILE and LOG_FILE_HANDLE before test to ensure clean state
         *LOG_FILE.lock().unwrap() = None;
+        *LOG_FILE_HANDLE.lock().unwrap() = None;
 
         let dir = tempdir().unwrap();
         let log_file_path = dir.path().join("test.log");
@@ -125,16 +174,18 @@ mod tests {
         assert!(log_contents.contains("test message 1"));
         assert!(log_contents.contains("[T1] test message 2"));
 
-        // Reset LOG_FILE for other tests
+        // Reset LOG_FILE and LOG_FILE_HANDLE for other tests
         *LOG_FILE.lock().unwrap() = None;
+        *LOG_FILE_HANDLE.lock().unwrap() = None;
         // tempdir is automatically cleaned up when it goes out of scope
     }
 
     #[test]
     #[serial]
     fn test_log_to_stdout() {
-        // Reset LOG_FILE before test to ensure clean state
+        // Reset LOG_FILE and LOG_FILE_HANDLE before test to ensure clean state
         *LOG_FILE.lock().unwrap() = None;
+        *LOG_FILE_HANDLE.lock().unwrap() = None;
 
         // This test is harder to verify automatically without capturing stdout.
         // For now, we'll just call it to ensure it doesn't panic.

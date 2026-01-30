@@ -47,25 +47,42 @@ fn main() {
     // Check for single instance after logging is configured
     if let Err(e) = check_single_instance(grace_seconds) { // from iftpfm2::instance
         // Ensure log function is available. It should be from iftpfm2::logging.
-        log(&format!("Error checking single instance: {}", e))
-            .expect("Failed to write to log during single instance check failure");
+        let _ = log(&format!("Error checking single instance: {}", e));
         process::exit(1);
     }
     
     // Ensure lock file is removed on normal exit or panic
     // `cleanup_lock_file` is from `iftpfm2::instance`
-    let _cleanup = scopeguard::guard((), |_| cleanup_lock_file());
+    let _cleanup = scopeguard::guard((), |_| {
+        join_listener_thread(); // Join the listener thread before cleanup
+        cleanup_lock_file();
+    });
 
-    log(&format!("{} version {} started", PROGRAM_NAME, PROGRAM_VERSION).as_str()) // PROGRAM_NAME & VERSION from lib.rs
-        .expect("Failed to write initial start message to log");
+    let _ = log(&format!("{} version {} started", PROGRAM_NAME, PROGRAM_VERSION).as_str()); // PROGRAM_NAME & VERSION from lib.rs
+
+    // Watch for shutdown signals and log them in the main thread (not in signal handler)
+    // This is async-signal-safe: we only poll atomic flags here
+    let signal_watch_thread = std::thread::spawn(|| {
+        use crate::shutdown::{is_shutdown_requested, get_signal_type};
+        loop {
+            if is_shutdown_requested() {
+                if let Some(signal_type) = get_signal_type() {
+                    let signal_name = if signal_type == 1 { "SIGINT (Ctrl+C)" } else { "SIGTERM" };
+                    let _ = log(&format!("Received termination signal ({}), PID {} shutting down gracefully",
+                        signal_name, std::process::id()));
+                }
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    });
 
     // Parse config file
     let config_file_path = config_file_option.expect("Config file path should be present due to parse_args validation");
     let configs_vec = match parse_config(&config_file_path) { // from iftpfm2::config
         Ok(cfgs) => cfgs,
         Err(e) => {
-            log(&format!("Error parsing config file '{}': {}", config_file_path, e))
-                .expect("Failed to write config parsing error to log");
+            let _ = log(&format!("Error parsing config file '{}': {}", config_file_path, e));
             process::exit(1);
         }
     };
@@ -75,8 +92,7 @@ fn main() {
         .num_threads(parallel.max(1)) // Ensure at least 1 thread
         .build()
         .unwrap_or_else(|e| {
-            log(&format!("Error creating thread pool: {}", e))
-                .expect("Failed to write thread pool creation error to log");
+            let _ = log(&format!("Error creating thread pool: {}", e));
             process::exit(1);
         });
 
@@ -117,6 +133,12 @@ fn main() {
             PROGRAM_NAME, PROGRAM_VERSION, total_transfers // Constants from lib.rs
         )
     };
-    
-    log(&exit_message).expect("Failed to write final exit message to log");
+
+    // Signal the watcher thread to exit (if we completed normally)
+    request_shutdown();
+
+    // Wait for the signal watcher thread to finish
+    let _ = signal_watch_thread.join();
+
+    let _ = log(&exit_message);
 }

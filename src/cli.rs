@@ -52,21 +52,45 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64) 
                 process::exit(0);
             }
             "-d" => delete = true,
-            "-l" => log_file = Some(args.next().expect("Missing log file argument")),
+            "-l" => log_file = Some(args.next().unwrap_or_else(|| {
+                eprintln!("Error: Missing log file argument");
+                print_usage();
+                process::exit(1);
+            })),
             "-p" => {
-                parallel = args
-                    .next()
-                    .expect("Missing parallel count argument")
-                    .parse()
-                    .expect("Parallel count must be a number")
+                parallel = match args.next() {
+                    Some(arg) => match arg.parse() {
+                        Ok(n) => n,
+                        Err(_) => {
+                            eprintln!("Error: Parallel count must be a positive number");
+                            print_usage();
+                            process::exit(1);
+                        }
+                    },
+                    None => {
+                        eprintln!("Error: Missing parallel count argument");
+                        print_usage();
+                        process::exit(1);
+                    }
+                }
             }
             "-r" => randomize = true,
             "-g" => {
-                grace_seconds = args
-                    .next()
-                    .expect("Missing grace seconds argument")
-                    .parse()
-                    .expect("Grace seconds must be a number")
+                grace_seconds = match args.next() {
+                    Some(arg) => match arg.parse() {
+                        Ok(n) => n,
+                        Err(_) => {
+                            eprintln!("Error: Grace seconds must be a positive number");
+                            print_usage();
+                            process::exit(1);
+                        }
+                    },
+                    None => {
+                        eprintln!("Error: Missing grace seconds argument");
+                        print_usage();
+                        process::exit(1);
+                    }
+                }
             }
             _ => {
                 if config_file.is_none() {

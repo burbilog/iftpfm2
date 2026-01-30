@@ -17,7 +17,7 @@ pub mod shutdown;
 pub use cli::parse_args;
 pub use config::{parse_config, Config};
 pub use ftp_ops::transfer_files;
-pub use instance::{check_single_instance, cleanup_lock_file};
+pub use instance::{check_single_instance, cleanup_lock_file, join_listener_thread};
 pub use logging::{log, log_with_thread, set_log_file};
 pub use shutdown::{is_shutdown_requested, request_shutdown}; // Added request_shutdown
 
