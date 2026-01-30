@@ -211,12 +211,8 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
             continue;
         }
 
-        match ftp_to.rm(filename.as_str()) {
-            Ok(_) => {
-                let _ = log_with_thread(format!("Deleted file {} at TARGET FTP server", filename).as_str(), Some(thread_id));
-            }
-            Err(_) => (), // Ignore error if file doesn't exist
-        };
+        // Use temporary filename for atomic transfer: .filename.tmp~
+        let tmp_filename = format!(".{}.tmp~", filename);
 
         if let Err(e) = ftp_from.transfer_type(ftp::types::FileType::Binary) {
             let _ = log_with_thread(format!(
@@ -236,11 +232,46 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
             continue;
         }
 
+        // Transfer to temporary file first for atomicity
         match ftp_from.simple_retr(filename.as_str()) {
-            Ok(mut data) => match ftp_to.put(filename.as_str(), &mut data) {
+            Ok(mut data) => match ftp_to.put(tmp_filename.as_str(), &mut data) {
                 Ok(_) => {
-                    let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
-                    successful_transfers += 1;
+                    // Atomic rename: first try to rename directly
+                    let rename_result = ftp_to.rename(tmp_filename.as_str(), filename.as_str());
+
+                    match rename_result {
+                        Ok(_) => {
+                            let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
+                            successful_transfers += 1;
+                        }
+                        Err(_) => {
+                            // Rename failed, likely because target file exists
+                            // Delete old file and retry rename
+                            match ftp_to.rm(filename.as_str()) {
+                                Ok(_) => {
+                                    let _ = log_with_thread(format!("Replaced existing file {}", filename).as_str(), Some(thread_id));
+                                }
+                                Err(_) => () // Ignore error if file somehow disappeared
+                            }
+
+                            match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
+                                Ok(_) => {
+                                    let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
+                                    successful_transfers += 1;
+                                }
+                                Err(e) => {
+                                    let _ = log_with_thread(format!(
+                                        "Error renaming temporary file {} to {}: {}",
+                                        tmp_filename, filename, e
+                                    )
+                                    .as_str(), Some(thread_id));
+                                    // Cleanup: try to remove the temporary file
+                                    let _ = ftp_to.rm(tmp_filename.as_str());
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     let _ = log_with_thread(format!(
