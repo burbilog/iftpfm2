@@ -252,23 +252,19 @@ pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
     Ok(())
 }
 
-/// Joins the socket listener thread
+/// Drops the socket listener thread handle
 ///
-/// Attempts to wait for the listener thread to finish.
-/// The thread may be blocked on listener.incoming(), so we only wait briefly.
-/// If the thread is still blocked, we continue with cleanup anyway - the OS
-/// will terminate the thread when the process exits.
+/// The listener thread is typically blocked on `incoming()` and cannot be
+/// cleanly joined. Instead of attempting to join (which would block indefinitely
+/// or create orphaned threads), we simply drop the handle.
+///
+/// When the process exits, the OS will terminate all threads automatically.
 /// Should be called during cleanup.
 pub fn join_listener_thread() {
     if let Ok(mut handle_guard) = LISTENER_HANDLE.lock() {
-        if let Some(handle) = handle_guard.take() {
-            // Try to join in a separate thread that we timeout
-            std::thread::spawn(move || {
-                let _ = handle.join();
-            });
-            // Don't wait - the listener thread is often blocked on incoming()
-            // The OS will clean it up when the process exits
-        }
+        // Take the handle and drop it explicitly
+        // This releases the thread's ownership, allowing OS cleanup on process exit
+        let _ = handle_guard.take();
     }
 }
 
