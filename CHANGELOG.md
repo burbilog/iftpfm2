@@ -2,6 +2,22 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.1.1] - 2026-01-30
+
+### Changed
+- **Replaced `ftp` crate with `suppaftp`** - actively maintained fork with better async/FTPS support
+- Binary mode setup moved outside file transfer loop for better performance (reduces FTP commands)
+
+### Added
+- `fs2` dependency for atomic file locking
+
+### Fixed
+- **Race condition in single-instance enforcement** - now uses atomic `flock()` on PID file instead of socket check/bind
+- **Data loss risk during file transfer** - files now uploaded to temporary name (`.filename.tmp~`) and renamed after successful transfer
+- Deprecated `timestamp()` calls updated to `and_utc().timestamp()` for compatibility with newer chrono
+
+---
+
 ## [2.1.0] - 2025-01-30
 
 ### Breaking Changes
@@ -109,6 +125,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.1.1** - suppaftp migration, atomic operations, race condition fixes
 - **2.1.0** - JSONL config format, better extensibility
 - **2.0.6** - Code modularization for better maintainability
 - **2.0.5** - Per-server regexp filtering, configurable grace period
