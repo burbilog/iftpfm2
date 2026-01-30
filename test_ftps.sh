@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+#
+# iftpfm2 FTPS test script
+# Tests FTPS connections with self-signed certificates using --insecure-skip-verify
+# requires python3, pyftpdlib with TLS support, and openssl
+
+set -e
+
+# Build the project first
+echo "Building iftpfm2..."
+cargo build
+
+# Create directories for FTP servers
+echo "Creating test directories..."
+mkdir -p /tmp/ftps1
+mkdir -p /tmp/ftps2
+
+# Generate self-signed certificate for FTPS
+echo "Generating self-signed certificate..."
+CERT_DIR=$(mktemp -d)
+openssl req -x509 -newkey rsa:2048 -keyout "$CERT_DIR/key.pem" -out "$CERT_DIR/cert.pem" \
+    -days 1 -nodes -subj "/CN=localhost" 2>/dev/null
+
+# Create Python script for FTPS server
+echo "Creating FTPS server script..."
+cat > "$CERT_DIR/ftps_server.py" << 'PYTHON_SCRIPT'
+import sys
+import os
+from pyftpdlib.authorizers import DummyAuthorizer
+from pyftpdlib.handlers import TLS_FTPHandler
+from pyftpdlib.servers import FTPServer
+
+def main():
+    port = int(sys.argv[1])
+    directory = sys.argv[2]
+    cert_file = sys.argv[3]
+    key_file = sys.argv[4]
+
+    authorizer = DummyAuthorizer()
+    authorizer.add_user(directory, directory, directory, perm='elradfmw')
+
+    handler = TLS_FTPHandler
+    handler.certfile = cert_file
+    handler.keyfile = key_file
+    handler.tls_control_required = True
+    handler.tls_data_required = True
+    handler.authorizer = authorizer
+
+    server = FTPServer(("127.0.0.1", port), handler)
+    print(f"FTPS server started on port {port}", flush=True)
+    server.serve_forever()
+
+if __name__ == "__main__":
+    main()
+PYTHON_SCRIPT
+
+# Start first FTPS server on port 2123
+echo "Starting first FTPS server on port 2123..."
+python3 "$CERT_DIR/ftps_server.py" 2123 /tmp/ftps1 "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" &
+ftps1_pid=$!
+
+# Start second FTPS server on port 2124
+echo "Starting second FTPS server on port 2124..."
+python3 "$CERT_DIR/ftps_server.py" 2124 /tmp/ftps2 "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" &
+ftps2_pid=$!
+
+# Wait for servers to start
+echo "Waiting for FTPS servers to be ready..."
+for i in {1..60}; do
+    if nc -z localhost 2123 2>/dev/null && nc -z localhost 2124 2>/dev/null; then
+        echo "FTPS servers are ready!"
+        break
+    fi
+    if [ $i -eq 60 ]; then
+        echo "ERROR: FTPS servers did not start in time"
+        kill $ftps1_pid $ftps2_pid 2>/dev/null || true
+        rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR"
+        exit 1
+    fi
+    sleep 0.5
+done
+
+# Create test files in the first server's directory
+echo "Creating test files in the source directory..."
+echo "test1" > /tmp/ftps1/test1.txt
+echo "test2" > /tmp/ftps1/test2.txt
+echo "test3" > /tmp/ftps1/test3.txt
+
+# Create config file for iftpfm2 with FTPS protocol
+echo "Creating config file with FTPS protocol..."
+echo '{"host_from":"localhost","port_from":2123,"login_from":"/tmp/ftps1","password_from":"/tmp/ftps1","path_from":"/","proto_from":"ftps","host_to":"localhost","port_to":2124,"login_to":"/tmp/ftps2","password_to":"/tmp/ftps2","path_to":"/","proto_to":"ftps","age":1,"filename_regexp":".*\\.txt"}' > /tmp/ftps_config.jsonl
+
+# Wait for files to age
+echo "Waiting 2 seconds for files to age..."
+sleep 2
+
+# Test without --insecure-skip-verify (should fail)
+echo ""
+echo "=== Test 1: Without --insecure-skip-verify (should fail) ==="
+if ./target/debug/iftpfm2 /tmp/ftps_config.jsonl 2>&1 | grep -q "certificate verify failed\|SSL routines\|error"; then
+    echo "EXPECTED: Connection failed due to certificate verification"
+else
+    echo "UNEXPECTED: Connection succeeded when it should have failed"
+fi
+
+# Test with --insecure-skip-verify (should succeed)
+echo ""
+echo "=== Test 2: With --insecure-skip-verify (should succeed) ==="
+if ./target/debug/iftpfm2 --insecure-skip-verify /tmp/ftps_config.jsonl; then
+    echo "SUCCESS: Transfer completed with --insecure-skip-verify"
+else
+    echo "ERROR: Transfer failed even with --insecure-skip-verify"
+    kill $ftps1_pid $ftps2_pid 2>/dev/null || true
+    rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR"
+    rm -f /tmp/ftps_config.jsonl
+    exit 1
+fi
+
+# Verify files were transferred
+echo ""
+echo "=== Verifying file transfer ==="
+if [ -f "/tmp/ftps2/test1.txt" ] && [ -f "/tmp/ftps2/test2.txt" ] && [ -f "/tmp/ftps2/test3.txt" ]; then
+    echo "SUCCESS: All files transferred to destination"
+    if [ -f "/tmp/ftps2/test1.txt" ] && [ "$(cat /tmp/ftps2/test1.txt)" = "test1" ]; then
+        echo "SUCCESS: File content is correct"
+    else
+        echo "ERROR: File content mismatch"
+    fi
+else
+    echo "ERROR: Not all files were transferred"
+    ls -la /tmp/ftps2/
+fi
+
+# Cleanup
+echo ""
+echo "Cleanup..."
+kill $ftps1_pid $ftps2_pid 2>/dev/null || true
+rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR"
+rm -f /tmp/ftps_config.jsonl
+
+echo "FTPS test completed!"

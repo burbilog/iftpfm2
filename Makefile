@@ -21,6 +21,7 @@ test:
 	./test.sh
 	./test_age.sh
 	./test_conn_timeout.sh
+	./test_ftps.sh
 
 # generate and install rust documentation (always rebuilds)
 .PHONY: doc

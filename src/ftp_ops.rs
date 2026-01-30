@@ -106,6 +106,7 @@ fn connect_server(
     port: u16,
     timeout: Duration,
     protocol: Protocol,
+    insecure_skip_verify: bool,
 ) -> Result<FtpStreamWrapper, suppaftp::FtpError> {
     let addrs: Vec<std::net::SocketAddr> = (hostname, port)
         .to_socket_addrs()
@@ -129,10 +130,19 @@ fn connect_server(
             Protocol::Ftps => {
                 // For FTPS, we need to establish TLS connection
                 // First connect to the port
-                let tls_connector = NativeTlsConnector::from(
-                    suppaftp::native_tls::TlsConnector::new()
-                        .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::new(std::io::ErrorKind::Other, e)))?
-                );
+                let tls_connector = if insecure_skip_verify {
+                    NativeTlsConnector::from(
+                        suppaftp::native_tls::TlsConnector::builder()
+                            .danger_accept_invalid_certs(true)
+                            .build()
+                            .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+                    )
+                } else {
+                    NativeTlsConnector::from(
+                        suppaftp::native_tls::TlsConnector::new()
+                            .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+                    )
+                };
 
                 // Connect with explicit SSL/TLS from the start
                 match NativeTlsFtpStream::connect_timeout(addr, timeout) {
@@ -166,6 +176,7 @@ fn connect_server(
 /// * `delete` - Whether to delete source files after transfer
 /// * `thread_id` - Identifier for logging in parallel mode
 /// * `connect_timeout` - Connection timeout in seconds (None = 30s default)
+/// * `insecure_skip_verify` - Whether to skip TLS certificate verification for FTPS
 ///
 /// # Returns
 /// Number of files successfully transferred
@@ -181,9 +192,9 @@ fn connect_server(
 ///
 /// # Example
 /// ```text
-/// // let count = transfer_files(&config, true, 1, None);
+/// // let count = transfer_files(&config, true, 1, None, false);
 /// ```
-pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>) -> i32 {
+pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>, insecure_skip_verify: bool) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
         let _ = log_with_thread("Shutdown requested, skipping transfer", Some(thread_id));
@@ -205,6 +216,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         config.port_from,
         timeout,
         config.proto_from,
+        insecure_skip_verify,
     ) {
         Ok(stream) => stream,
         Err(e) => {
@@ -242,6 +254,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         config.port_to,
         timeout,
         config.proto_to,
+        insecure_skip_verify,
     ) {
         Ok(stream) => stream,
         Err(e) => {
@@ -523,7 +536,7 @@ mod tests {
             filename_regexp: ".*".to_string(),
         };
 
-        let result = transfer_files(&config, false, 1, None);
+        let result = transfer_files(&config, false, 1, None, false);
         assert_eq!(result, 0, "Should return 0 when shutdown requested before start");
 
         // Reset shutdown flag for other tests

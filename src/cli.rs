@@ -6,7 +6,7 @@ use std::process;
 /// Uses `PROGRAM_NAME` constant from `crate` for the executable name.
 pub fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] [-g grace_seconds] [-t connect_timeout] config_file",
+        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] [-g grace_seconds] [-t connect_timeout] [--insecure-skip-verify] config_file",
         crate::PROGRAM_NAME // Now using PROGRAM_NAME from lib.rs
     );
 }
@@ -22,6 +22,7 @@ pub fn print_usage() {
 /// - `bool`: Whether to randomize processing order.
 /// - `u64`: Grace period in seconds for shutdown.
 /// - `Option<u64>`: Connection timeout in seconds (None = 30s default).
+/// - `bool`: Whether to skip TLS certificate verification (FTPS only).
 ///
 /// # Panics
 /// - If required arguments are missing
@@ -29,9 +30,9 @@ pub fn print_usage() {
 ///
 /// # Example
 /// ```text
-/// // let (delete, log_file, config_file, parallel, randomize, grace_seconds) = parse_args();
+/// // let (delete, log_file, config_file, parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify) = parse_args();
 /// ```
-pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, Option<u64>) {
+pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, Option<u64>, bool) {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
@@ -39,6 +40,7 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, 
     let mut randomize = false;
     let mut grace_seconds = 30; // Default grace period
     let mut connect_timeout: Option<u64> = None; // Default 30 seconds will be applied in ftp_ops
+    let mut insecure_skip_verify = false; // Default: verify certificates
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -111,6 +113,9 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, 
                     }
                 }
             }
+            "--insecure-skip-verify" => {
+                insecure_skip_verify = true;
+            }
             _ => {
                 if config_file.is_none() {
                     config_file = Some(arg);
@@ -129,5 +134,5 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, 
         process::exit(1);
     }
 
-    (delete, log_file, config_file, parallel, randomize, grace_seconds, connect_timeout)
+    (delete, log_file, config_file, parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify)
 }
