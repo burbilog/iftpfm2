@@ -1,13 +1,165 @@
-use crate::config::Config;
+use crate::config::{Config, Protocol};
 use crate::logging::log_with_thread;
 use crate::shutdown::is_shutdown_requested;
-use suppaftp::{FtpStream, types::FileType};
+use suppaftp::{FtpStream, NativeTlsFtpStream, NativeTlsConnector, types::FileType};
 use regex::Regex;
 use std::io::Cursor;
 use std::net::ToSocketAddrs;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// Transfers files between FTP servers according to configuration
+/// Enum wrapper for either FTP or FTPS stream
+enum FtpStreamWrapper {
+    Ftp(FtpStream),
+    Ftps(NativeTlsFtpStream),
+}
+
+impl FtpStreamWrapper {
+    fn login(&mut self, user: &str, password: &str) -> Result<(), suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.login(user, password),
+            FtpStreamWrapper::Ftps(s) => s.login(user, password),
+        }
+    }
+
+    fn cwd(&mut self, path: &str) -> Result<(), suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.cwd(path),
+            FtpStreamWrapper::Ftps(s) => s.cwd(path),
+        }
+    }
+
+    fn transfer_type(&mut self, filetype: FileType) -> Result<(), suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.transfer_type(filetype),
+            FtpStreamWrapper::Ftps(s) => s.transfer_type(filetype),
+        }
+    }
+
+    fn nlst(&mut self, pathname: Option<&str>) -> Result<Vec<String>, suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.nlst(pathname),
+            FtpStreamWrapper::Ftps(s) => s.nlst(pathname),
+        }
+    }
+
+    fn mdtm(&mut self, pathname: &str) -> Result<chrono::NaiveDateTime, suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.mdtm(pathname),
+            FtpStreamWrapper::Ftps(s) => s.mdtm(pathname),
+        }
+    }
+
+    fn retr<F, D>(&mut self, file_name: &str, callback: F) -> Result<D, suppaftp::FtpError>
+    where
+        F: FnMut(&mut dyn std::io::Read) -> Result<D, suppaftp::FtpError>,
+    {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.retr(file_name, callback),
+            FtpStreamWrapper::Ftps(s) => s.retr(file_name, callback),
+        }
+    }
+
+    fn put_file<R: std::io::Read>(&mut self, filename: &str, reader: &mut R) -> Result<u64, suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.put_file(filename, reader),
+            FtpStreamWrapper::Ftps(s) => s.put_file(filename, reader),
+        }
+    }
+
+    fn rename(&mut self, from_name: &str, to_name: &str) -> Result<(), suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.rename(from_name, to_name),
+            FtpStreamWrapper::Ftps(s) => s.rename(from_name, to_name),
+        }
+    }
+
+    fn rm(&mut self, filename: &str) -> Result<(), suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.rm(filename),
+            FtpStreamWrapper::Ftps(s) => s.rm(filename),
+        }
+    }
+
+    fn quit(&mut self) -> Result<(), suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.quit(),
+            FtpStreamWrapper::Ftps(s) => s.quit(),
+        }
+    }
+}
+
+impl From<FtpStream> for FtpStreamWrapper {
+    fn from(stream: FtpStream) -> Self {
+        FtpStreamWrapper::Ftp(stream)
+    }
+}
+
+impl From<NativeTlsFtpStream> for FtpStreamWrapper {
+    fn from(stream: NativeTlsFtpStream) -> Self {
+        FtpStreamWrapper::Ftps(stream)
+    }
+}
+
+/// Connect to FTP/FTPS server with timeout, trying all addresses
+fn connect_server(
+    hostname: &str,
+    port: u16,
+    timeout: Duration,
+    protocol: Protocol,
+) -> Result<FtpStreamWrapper, suppaftp::FtpError> {
+    let addrs: Vec<std::net::SocketAddr> = (hostname, port)
+        .to_socket_addrs()
+        .map_err(|e| suppaftp::FtpError::ConnectionError(e))?
+        .collect();
+
+    if addrs.is_empty() {
+        return Err(suppaftp::FtpError::ConnectionError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No addresses found",
+        )));
+    }
+
+    let mut last_error = None;
+    for addr in addrs {
+        let result = match protocol {
+            Protocol::Ftp => {
+                FtpStream::connect_timeout(addr, timeout)
+                    .map(|s| FtpStreamWrapper::Ftp(s))
+            }
+            Protocol::Ftps => {
+                // For FTPS, we need to establish TLS connection
+                // First connect to the port
+                let tls_connector = NativeTlsConnector::from(
+                    suppaftp::native_tls::TlsConnector::new()
+                        .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+                );
+
+                // Connect with explicit SSL/TLS from the start
+                match NativeTlsFtpStream::connect_timeout(addr, timeout) {
+                    Ok(secure_stream) => {
+                        // Switch to secure mode
+                        secure_stream.into_secure(tls_connector, hostname)
+                            .map(|s| FtpStreamWrapper::Ftps(s))
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+        };
+        match result {
+            Ok(stream) => return Ok(stream),
+            Err(e) => last_error = Some(e),
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+        suppaftp::FtpError::ConnectionError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No addresses available"
+        ))
+    }))
+}
+
+/// Transfers files between FTP/FTPS servers according to configuration
 ///
 /// # Arguments
 /// * `config` - FTP connection and transfer parameters
@@ -25,10 +177,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// - Skips files younger than config.age seconds
 /// - Respects shutdown requests
 /// - Logs detailed transfer progress
+/// - Supports both FTP and FTPS protocols via proto_from/proto_to fields
 ///
 /// # Example
 /// ```text
-/// // let count = transfer_files(&config, true, 1);
+/// // let count = transfer_files(&config, true, 1, None);
 /// ```
 pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>) -> i32 {
     // Check for shutdown request before starting
@@ -38,64 +191,32 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
     }
 
     let _ = log_with_thread(format!(
-        "Transferring files from ftp://{}:{}{} to ftp://{}:{}{}",
-        config.ip_address_from,
-        config.port_from,
-        config.path_from,
-        config.ip_address_to,
-        config.port_to,
-        config.path_to
+        "Transferring files from {}://{}:{}{} to {}://{}:{}{}",
+        config.proto_from, config.ip_address_from, config.port_from, config.path_from,
+        config.proto_to, config.ip_address_to, config.port_to, config.path_to
     )
     .as_str(), Some(thread_id));
-    // Connect to the source FTP server
+
     let timeout = Duration::from_secs(connect_timeout.unwrap_or(30));
-    let addrs_result: Result<Vec<_>, _> = (config.ip_address_from.as_str(), config.port_from)
-        .to_socket_addrs()
-        .map(|a| a.collect());
-    let addrs = match addrs_result {
-        Ok(addrs) => addrs,
+
+    // Connect to the source FTP server
+    let mut ftp_from = match connect_server(
+        &config.ip_address_from,
+        config.port_from,
+        timeout,
+        config.proto_from,
+    ) {
+        Ok(stream) => stream,
         Err(e) => {
             let _ = log_with_thread(format!(
-                "Error resolving SOURCE FTP server {}: {}",
-                config.ip_address_from, e
-            )
-            .as_str(), Some(thread_id));
-            return 0;
-        }
-    };
-
-    let mut ftp_from = None;
-    let mut last_error = None;
-    for addr in addrs {
-        match FtpStream::connect_timeout(addr, timeout) {
-            Ok(ftp) => {
-                ftp_from = Some(ftp);
-                last_error = None;
-                break;
-            }
-            Err(e) => {
-                last_error = Some(e);
-            }
-        }
-    }
-
-    let mut ftp_from = match ftp_from {
-        Some(ftp) => ftp,
-        None => {
-            let error = last_error.unwrap_or_else(|| {
-                suppaftp::FtpError::ConnectionError(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "No addresses available"
-                ))
-            });
-            let _ = log_with_thread(format!(
                 "Error connecting to SOURCE FTP server {}:{} ({}s timeout): {}",
-                config.ip_address_from, config.port_from, connect_timeout.unwrap_or(30), error
+                config.ip_address_from, config.port_from, connect_timeout.unwrap_or(30), e
             )
             .as_str(), Some(thread_id));
             return 0;
         }
     };
+
     if let Err(e) = ftp_from.login(config.login_from.as_str(), config.password_from.as_str()) {
         let _ = log_with_thread(format!(
             "Error logging into SOURCE FTP server {}: {}",
@@ -116,55 +237,24 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
     }
 
     // Connect to the target FTP server
-    let addrs_to_result: Result<Vec<_>, _> = (config.ip_address_to.as_str(), config.port_to)
-        .to_socket_addrs()
-        .map(|a| a.collect());
-    let addrs_to = match addrs_to_result {
-        Ok(addrs) => addrs,
+    let mut ftp_to = match connect_server(
+        &config.ip_address_to,
+        config.port_to,
+        timeout,
+        config.proto_to,
+    ) {
+        Ok(stream) => stream,
         Err(e) => {
             let _ = log_with_thread(format!(
-                "Error resolving TARGET FTP server {}: {}",
-                config.ip_address_to, e
-            )
-            .as_str(), Some(thread_id));
-            let _ = ftp_from.quit();
-            return 0;
-        }
-    };
-
-    let mut ftp_to = None;
-    let mut last_error_to = None;
-    for addr in addrs_to {
-        match FtpStream::connect_timeout(addr, timeout) {
-            Ok(ftp) => {
-                ftp_to = Some(ftp);
-                last_error_to = None;
-                break;
-            }
-            Err(e) => {
-                last_error_to = Some(e);
-            }
-        }
-    }
-
-    let mut ftp_to = match ftp_to {
-        Some(ftp) => ftp,
-        None => {
-            let error = last_error_to.unwrap_or_else(|| {
-                suppaftp::FtpError::ConnectionError(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "No addresses available"
-                ))
-            });
-            let _ = log_with_thread(format!(
                 "Error connecting to TARGET FTP server {}:{} ({}s timeout): {}",
-                config.ip_address_to, config.port_to, connect_timeout.unwrap_or(30), error
+                config.ip_address_to, config.port_to, connect_timeout.unwrap_or(30), e
             )
             .as_str(), Some(thread_id));
             let _ = ftp_from.quit();
             return 0;
         }
     };
+
     if let Err(e) = ftp_to.login(config.login_to.as_str(), config.password_to.as_str()) {
         let _ = log_with_thread(format!(
             "Error logging into TARGET FTP server {}: {}",
@@ -422,11 +512,13 @@ mod tests {
             login_from: "test".to_string(),
             password_from: "test".to_string(),
             path_from: "/test/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
             port_to: 21,
             login_to: "test".to_string(),
             password_to: "test".to_string(),
             path_to: "/test/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
         };
@@ -448,11 +540,13 @@ mod tests {
             login_from: "test".to_string(),
             password_from: "test".to_string(),
             path_from: "/test/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
             port_to: 21,
             login_to: "test".to_string(),
             password_to: "test".to_string(),
             path_to: "/test/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: r".*\.txt$".to_string(),
         };

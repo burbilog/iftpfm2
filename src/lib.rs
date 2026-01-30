@@ -15,7 +15,7 @@ pub mod shutdown;
 
 // Re-export key items for easy use by the binary (main.rs)
 pub use cli::parse_args;
-pub use config::{parse_config, Config};
+pub use config::{parse_config, Config, Protocol};
 pub use ftp_ops::transfer_files;
 pub use instance::{check_single_instance, cleanup_lock_file, join_listener_thread};
 pub use logging::{log, log_with_thread, set_log_file};

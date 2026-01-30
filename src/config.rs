@@ -2,6 +2,32 @@ use regex::Regex;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
+use std::fmt;
+
+/// FTP/FTPS protocol type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    /// Standard FTP (unencrypted)
+    Ftp,
+    /// FTP over TLS/SSL (encrypted)
+    Ftps,
+}
+
+impl Default for Protocol {
+    fn default() -> Self {
+        Protocol::Ftp
+    }
+}
+
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Protocol::Ftp => write!(f, "ftp"),
+            Protocol::Ftps => write!(f, "ftps"),
+        }
+    }
+}
 
 /// FTP transfer configuration parameters
 #[derive(Debug, PartialEq, Deserialize)]
@@ -21,6 +47,9 @@ pub struct Config {
     /// Source directory path (must be literal path, no wildcards) (JSON field: path_from)
     #[serde(rename = "path_from")]
     pub path_from: String,
+    /// Source protocol (ftp or ftps, default: ftp) (JSON field: proto_from)
+    #[serde(rename = "proto_from", default)]
+    pub proto_from: Protocol,
     /// Destination FTP server IP/hostname (JSON field: host_to)
     #[serde(rename = "host_to")]
     pub ip_address_to: String,
@@ -36,6 +65,9 @@ pub struct Config {
     /// Destination directory path (JSON field: path_to)
     #[serde(rename = "path_to")]
     pub path_to: String,
+    /// Destination protocol (ftp or ftps, default: ftp) (JSON field: proto_to)
+    #[serde(rename = "proto_to", default)]
+    pub proto_to: Protocol,
     /// Minimum file age to transfer (seconds) (JSON field: age)
     #[serde(rename = "age")]
     pub age: u64,
@@ -236,11 +268,13 @@ mod tests {
                 login_from: "user1".to_string(),
                 password_from: "password1".to_string(),
                 path_from: "/path/to/files/".to_string(),
+                proto_from: Protocol::Ftp,
                 ip_address_to: "192.168.0.2".to_string(),
                 port_to: 22,
                 login_to: "user2".to_string(),
                 password_to: "password2".to_string(),
                 path_to: "/path/to/files2".to_string(),
+                proto_to: Protocol::Ftp,
                 age: 30,
                 filename_regexp: ".*".to_string(),
             },
@@ -250,11 +284,13 @@ mod tests {
                 login_from: "user3".to_string(),
                 password_from: "password3".to_string(),
                 path_from: "/path/to/files3/".to_string(),
+                proto_from: Protocol::Ftp,
                 ip_address_to: "192.168.0.4".to_string(),
                 port_to: 22,
                 login_to: "user4".to_string(),
                 password_to: "password4".to_string(),
                 path_to: "/path/to/files4".to_string(),
+                proto_to: Protocol::Ftp,
                 age: 60,
                 filename_regexp: ".*".to_string(),
             },
@@ -314,11 +350,13 @@ mod tests {
             login_from: "user".to_string(),
             password_from: "pass".to_string(),
             path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
         };
@@ -333,11 +371,13 @@ mod tests {
             login_from: "user".to_string(),
             password_from: "pass".to_string(),
             path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
         };
@@ -352,11 +392,13 @@ mod tests {
             login_from: "".to_string(),
             password_from: "pass".to_string(),
             path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
         };
@@ -371,11 +413,13 @@ mod tests {
             login_from: "user".to_string(),
             password_from: "".to_string(),
             path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
         };
@@ -390,11 +434,13 @@ mod tests {
             login_from: "user".to_string(),
             password_from: "pass".to_string(),
             path_from: "".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
         };
@@ -409,11 +455,13 @@ mod tests {
             login_from: "user".to_string(),
             password_from: "pass".to_string(),
             path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 0,
             filename_regexp: ".*".to_string(),
         };
@@ -428,11 +476,13 @@ mod tests {
             login_from: "user".to_string(),
             password_from: "pass".to_string(),
             path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: "(invalid[".to_string(),
         };
@@ -447,11 +497,13 @@ mod tests {
             login_from: "user".to_string(),
             password_from: "pass".to_string(),
             path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
             password_to: "pass2".to_string(),
             path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
         };
