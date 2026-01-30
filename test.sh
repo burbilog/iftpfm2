@@ -24,13 +24,13 @@ echo "test2" > /tmp/ftp1/test2.txt
 echo "test3" > /tmp/ftp1/test3.txt
 
 echo Creating config file for iftpfm2, age is 1 second
-echo "localhost,2121,u1,p1,/,localhost,2122,u2,p2,/,1,.*\\.txt" > /tmp/config.txt
+echo '{"host_from":"localhost","port_from":2121,"login_from":"u1","password_from":"p1","path_from":"/","host_to":"localhost","port_to":2122,"login_to":"u2","password_to":"p2","path_to":"/","age":1,"filename_regexp":".*\\.txt"}' > /tmp/config.jsonl
 
 echo Waiting 2 seconds to expire the age
 sleep 2
 
 echo Running iftpfm2 using the config file, the -d option to delete source files
-./target/debug/iftpfm2 -d /tmp/config.txt
+./target/debug/iftpfm2 -d /tmp/config.jsonl
 
 echo Ensure that the files were moved to the second servers directory and deleted from the source server
 echo
@@ -48,4 +48,4 @@ kill $ftp1_pid
 kill $ftp2_pid
 rm -rf /tmp/ftp1
 rm -rf /tmp/ftp2
-rm -f /tmp/config.txt
+rm -f /tmp/config.jsonl

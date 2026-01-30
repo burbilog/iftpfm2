@@ -21,6 +21,9 @@ ctrlc = "3.4.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+[dev-dependencies]
+serial_test = "3.0"
+
 [[bin]]
 name = "migrate_csv_to_jsonl"
 path = "migrate_csv_to_jsonl.rs"

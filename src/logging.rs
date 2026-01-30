@@ -104,13 +104,18 @@ pub fn set_log_file<P: AsRef<Path>>(path: P) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::{self, remove_file};
+    use serial_test::serial;
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]
+    #[serial]
     fn test_log_to_file() {
+        // Reset LOG_FILE before test to ensure clean state
+        *LOG_FILE.lock().unwrap() = None;
+
         let dir = tempdir().unwrap();
-        let log_file_path = dir.path().join("log.txt");
+        let log_file_path = dir.path().join("test.log");
 
         set_log_file(&log_file_path);
         log("test message 1").unwrap();
@@ -120,18 +125,20 @@ mod tests {
         assert!(log_contents.contains("test message 1"));
         assert!(log_contents.contains("[T1] test message 2"));
 
-        // Clean up
-        remove_file(log_file_path).unwrap();
-        // Reset LOG_FILE for other tests if any
+        // Reset LOG_FILE for other tests
         *LOG_FILE.lock().unwrap() = None;
+        // tempdir is automatically cleaned up when it goes out of scope
     }
 
     #[test]
+    #[serial]
     fn test_log_to_stdout() {
+        // Reset LOG_FILE before test to ensure clean state
+        *LOG_FILE.lock().unwrap() = None;
+
         // This test is harder to verify automatically without capturing stdout.
         // For now, we'll just call it to ensure it doesn't panic.
         // Manual verification or a more sophisticated test setup would be needed.
-        *LOG_FILE.lock().unwrap() = None; // Ensure logging to stdout
         log("test stdout message 1").unwrap();
         log_with_thread("test stdout message 2", Some(2)).unwrap();
         // If we reach here, it means no panic occurred.
