@@ -1,9 +1,10 @@
 use crate::config::Config;
 use crate::logging::log_with_thread;
 use crate::shutdown::is_shutdown_requested;
-use ftp::FtpStream;
+use suppaftp::{FtpStream, types::FileType};
 use regex::Regex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH}; // Moved Duration and UNIX_EPOCH here
+use std::io::Cursor;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Transfers files between FTP servers according to configuration
 ///
@@ -111,7 +112,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
     }
 
     // Set binary mode once for both connections (outside the file loop)
-    if let Err(e) = ftp_from.transfer_type(ftp::types::FileType::Binary) {
+    if let Err(e) = ftp_from.transfer_type(FileType::Binary) {
         let _ = log_with_thread(format!(
             "Error setting binary mode on SOURCE FTP server: {}",
             e
@@ -122,7 +123,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
         return 0;
     }
 
-    if let Err(e) = ftp_to.transfer_type(ftp::types::FileType::Binary) {
+    if let Err(e) = ftp_to.transfer_type(FileType::Binary) {
         let _ = log_with_thread(format!(
             "Error setting binary mode on TARGET FTP server: {}",
             e
@@ -170,17 +171,9 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
         }
 
         // Get the modified time of the file on the FTP server.
-        // ftp::FtpStream::mdtm returns Result<Option<ftp_chrono::DateTime<ftp_chrono::Utc>>>
-        // Let type inference handle `datetime_utc_ftp_chrono`
-        let datetime_utc_ftp_chrono = match ftp_from.mdtm(filename.as_str()) {
-            Ok(Some(dt)) => dt, // dt is ftp_chrono::DateTime<Utc>
-            Ok(None) => {
-                let _ = log_with_thread(&format!(
-                    "MDTM command not supported or file '{}' has no timestamp, skipping",
-                    filename
-                ), Some(thread_id));
-                continue;
-            }
+        // suppaftp::FtpStream::mdtm returns Result<chrono::NaiveDateTime, FtpError>
+        let datetime_naive = match ftp_from.mdtm(filename.as_str()) {
+            Ok(dt) => dt,
             Err(e) => {
                 let _ = log_with_thread(&format!(
                     "Error getting modified time for file '{}': {}, skipping",
@@ -191,23 +184,15 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
             }
         };
 
-        // Convert ftp_chrono::DateTime<Utc> to SystemTime for age calculation.
-        // datetime_utc_ftp_chrono is from chrono 0.2.x via the ftp crate.
+        // Convert NaiveDateTime to SystemTime for age calculation.
+        // NaiveDateTime has no timezone, so we assume it's UTC for MDTM purposes.
         let modified_system_time = {
-            // Duration and UNIX_EPOCH are now imported at the top of the file.
-            let secs = datetime_utc_ftp_chrono.timestamp();
-            let nanos = datetime_utc_ftp_chrono.timestamp_subsec_nanos(); // This is u32 in chrono 0.2.x
+            let secs = datetime_naive.and_utc().timestamp();
+            let nanos = datetime_naive.and_utc().timestamp_subsec_nanos();
             if secs < 0 {
-                 // Handle pre-epoch times if necessary, though unlikely for FTP MDTM.
-                 // For simplicity, we might log an error and skip, or use UNIX_EPOCH as a fallback.
-                 // Here, we'll assume positive timestamps for typical FTP server file times.
-                 // If secs is negative, UNIX_EPOCH + Duration::new(secs as u64, nanos) would panic.
-                 // A more robust solution might involve conditional subtraction from UNIX_EPOCH.
-                 // For now, let's proceed assuming MDTM gives times at or after epoch.
-                 // If this assumption is wrong, this part needs more robust handling.
                 let _ = log_with_thread(&format!(
                     "File '{}' has a pre-epoch modification time ({}), skipping",
-                    filename, datetime_utc_ftp_chrono
+                    filename, datetime_naive
                 ), Some(thread_id));
                 continue;
             }
@@ -216,10 +201,10 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
 
         let file_age_seconds = match SystemTime::now().duration_since(modified_system_time) {
             Ok(duration) => duration.as_secs(),
-            Err(_) => { // SystemTime::now() is earlier than modified_system_time (file from the future)
+            Err(_) => {
                 let _ = log_with_thread(&format!(
                     "File '{}' has a modification time in the future ({} vs now), skipping",
-                    filename, datetime_utc_ftp_chrono // Log the original ftp_chrono time
+                    filename, datetime_naive
                 ), Some(thread_id));
                 continue;
             }
@@ -238,62 +223,74 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
         let tmp_filename = format!(".{}.tmp~", filename);
 
         // Transfer to temporary file first for atomicity
-        match ftp_from.simple_retr(filename.as_str()) {
-            Ok(mut data) => match ftp_to.put(tmp_filename.as_str(), &mut data) {
-                Ok(_) => {
-                    // Atomic rename: first try to rename directly
-                    let rename_result = ftp_to.rename(tmp_filename.as_str(), filename.as_str());
+        // suppaftp uses retr() with a reader callback for download
+        let transfer_result = ftp_from.retr(filename.as_str(), |stream| {
+            let mut data = Vec::new();
+            let reader = stream;
+            reader.read_to_end(&mut data).map_err(suppaftp::FtpError::ConnectionError)?;
+            Ok(data)
+        });
 
-                    match rename_result {
-                        Ok(_) => {
-                            let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
-                            successful_transfers += 1;
-                        }
-                        Err(_) => {
-                            // Rename failed, likely because target file exists
-                            // Delete old file and retry rename
-                            match ftp_to.rm(filename.as_str()) {
-                                Ok(_) => {
-                                    let _ = log_with_thread(format!("Replaced existing file {}", filename).as_str(), Some(thread_id));
-                                }
-                                Err(_) => () // Ignore error if file somehow disappeared
+        match transfer_result {
+            Ok(data) => {
+                // Upload the data to target server using put_file() with a reader
+                let mut reader = Cursor::new(data);
+                match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
+                    Ok(_) => {
+                        // Upload successful, now rename the temporary file
+                        // Atomic rename: first try to rename directly
+                        let rename_result = ftp_to.rename(tmp_filename.as_str(), filename.as_str());
+
+                        match rename_result {
+                            Ok(_) => {
+                                let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
+                                successful_transfers += 1;
                             }
-
-                            match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
-                                Ok(_) => {
-                                    let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
-                                    successful_transfers += 1;
+                            Err(_) => {
+                                // Rename failed, likely because target file exists
+                                // Delete old file and retry rename
+                                match ftp_to.rm(filename.as_str()) {
+                                    Ok(_) => {
+                                        let _ = log_with_thread(format!("Replaced existing file {}", filename).as_str(), Some(thread_id));
+                                    }
+                                    Err(_) => () // Ignore error if file somehow disappeared
                                 }
-                                Err(e) => {
-                                    let _ = log_with_thread(format!(
-                                        "Error renaming temporary file {} to {}: {}",
-                                        tmp_filename, filename, e
-                                    )
-                                    .as_str(), Some(thread_id));
-                                    // Cleanup: try to remove the temporary file
-                                    let _ = ftp_to.rm(tmp_filename.as_str());
-                                    continue;
+
+                                match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
+                                    Ok(_) => {
+                                        let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
+                                        successful_transfers += 1;
+                                    }
+                                    Err(e) => {
+                                        let _ = log_with_thread(format!(
+                                            "Error renaming temporary file {} to {}: {}",
+                                            tmp_filename, filename, e
+                                        )
+                                        .as_str(), Some(thread_id));
+                                        // Cleanup: try to remove the temporary file
+                                        let _ = ftp_to.rm(tmp_filename.as_str());
+                                    }
                                 }
                             }
                         }
                     }
+                    Err(e) => {
+                        let _ = log_with_thread(format!(
+                            "Error uploading file {} to TARGET FTP server: {}",
+                            filename, e
+                        )
+                        .as_str(), Some(thread_id));
+                        // Cleanup: try to remove the temporary file
+                        let _ = ftp_to.rm(tmp_filename.as_str());
+                    }
                 }
-                Err(e) => {
-                    let _ = log_with_thread(format!(
-                        "Error transferring file {} to TARGET FTP server: {}",
-                        filename, e
-                    )
-                    .as_str(), Some(thread_id));
-                    continue;
-                }
-            },
+            }
             Err(e) => {
                 let _ = log_with_thread(format!(
-                    "Error transferring file {} from SOURCE FTP server: {}",
+                    "Error transferring file {}: {}",
                     filename, e
                 )
                 .as_str(), Some(thread_id));
-                continue;
             }
         }
 
