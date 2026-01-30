@@ -338,4 +338,31 @@ mod tests {
         assert!(jsonl.contains("пароль"));
         assert!(jsonl.contains("/путь/"));
     }
+
+    #[test]
+    fn test_convert_backslash_in_regex() {
+        // Test that backslashes in regex patterns are properly escaped for JSON
+        // CSV: .*\.(csv|txt)$  (one backslash in the source)
+        // JSON: ".*\\.(csv|txt)$" (double backslash - proper JSON escaping)
+        let input = r#"192.168.1.1,21,user1,pass1,/path1/,192.168.1.2,21,user2,pass2,/path2/,86400,.*\.(csv|txt)$
+192.168.1.1,21,user1,pass1,/path1/,192.168.1.2,21,user2,pass2,/path2/,86400,\d{4}-\d{2}-\d{2}.*\.log
+192.168.1.1,21,user1,pass1,/path1/,192.168.1.2,21,user2,pass2,/path2/,86400,file_\d+\.txt
+"#;
+
+        let dir = tempdir().unwrap();
+        let input_path = dir.path().join("input.csv");
+        let output_path = dir.path().join("output.jsonl");
+
+        let mut file = File::create(&input_path).unwrap();
+        file.write_all(input.as_bytes()).unwrap();
+
+        let result = convert_csv_to_jsonl_internal(input_path.to_str().unwrap(), output_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        let jsonl = result.unwrap();
+        // In JSON, backslashes must be escaped as \\
+        assert!(jsonl.contains(r#""filename_regexp":".*\\.(csv|txt)$""#));
+        assert!(jsonl.contains(r#""filename_regexp":"\\d{4}-\\d{2}-\\d{2}.*\\.log""#));
+        assert!(jsonl.contains(r#""filename_regexp":"file_\\d+\\.txt""#));
+    }
 }
