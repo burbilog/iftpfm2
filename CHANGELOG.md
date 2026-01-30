@@ -2,6 +2,21 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.2.0] - 2026-01-30
+
+### Added
+- **FTPS protocol support** - new `proto_from` and `proto_to` config fields for selecting FTP or FTPS per connection
+- **Connection timeout parameter** - `-t seconds` flag for configurable FTP connection timeout (default: 30s)
+- **Self-signed certificate support** - `--insecure-skip-verify` flag to bypass TLS certificate verification for FTPS
+- `test_ftps.sh` integration test for FTPS with self-signed certificates
+- `test_conn_timeout.sh` integration test for connection timeout
+
+### Changed
+- Config format: `proto_from` and `proto_to` fields added (default: `ftp`)
+- Error messages now show timeout value when connection fails
+
+---
+
 ## [2.1.1] - 2026-01-30
 
 ### Changed
@@ -125,6 +140,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.2.0** - FTPS protocol support, connection timeout, self-signed certificates
 - **2.1.1** - suppaftp migration, atomic operations, race condition fixes
 - **2.1.0** - JSONL config format, better extensibility
 - **2.0.6** - Code modularization for better maintainability
