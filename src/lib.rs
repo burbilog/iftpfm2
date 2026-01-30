@@ -27,9 +27,13 @@ pub use shutdown::{is_shutdown_requested, request_shutdown}; // Added request_sh
 /// - Unix domain socket (/tmp/{PROGRAM_NAME}.sock)
 pub const PROGRAM_NAME: &str = "iftpfm2";
 
-/// Current version of the program (from Cargo.toml)
+/// Current version of the program (from Cargo.toml via CARGO_PKG_VERSION)
+///
+/// This is automatically set by Cargo during compilation based on the
+/// version field in Cargo.toml. Do not edit this value directly - update
+/// Cargo.toml instead.
 /// Follows semantic versioning (MAJOR.MINOR.PATCH)
-pub const PROGRAM_VERSION: &str = "2.0.6";
+pub const PROGRAM_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Dependencies that were in main.rs and are used by multiple modules,
 // or are fundamental to the library's operation, can be listed here
