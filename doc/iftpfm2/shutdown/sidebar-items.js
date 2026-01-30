@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["is_shutdown_requested","request_shutdown"],"static":["SHUTDOWN_REQUESTED"]};
+window.SIDEBAR_ITEMS = {"fn":["get_signal_type","is_shutdown_requested","request_shutdown","request_shutdown_with_signal"],"static":["SHUTDOWN_REQUESTED","SIGNAL_TYPE"]};
