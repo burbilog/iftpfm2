@@ -7,6 +7,7 @@
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
+use serde_json::json;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -69,24 +70,47 @@ fn main() {
             continue;
         }
 
-        // Convert to JSONL format
+        // Parse port and age as numbers for proper JSON serialization
+        let port_from: u16 = match fields[1].parse() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("Warning: Line {} has invalid port_from '{}', skipping", line_num + 1, fields[1]);
+                continue;
+            }
+        };
+        let port_to: u16 = match fields[6].parse() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("Warning: Line {} has invalid port_to '{}', skipping", line_num + 1, fields[6]);
+                continue;
+            }
+        };
+        let age: u64 = match fields[10].parse() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("Warning: Line {} has invalid age '{}', skipping", line_num + 1, fields[10]);
+                continue;
+            }
+        };
+
+        // Convert to JSONL format using serde_json for proper escaping
         // CSV: host_from,port_from,login_from,password_from,path_from,host_to,port_to,login_to,password_to,path_to,age,filename_regexp
-        // JSONL: {"host_from":"...","port_from":21,...}
-        let jsonl = format!(
-            r#"{{"host_from":"{}","port_from":{},"login_from":"{}","password_from":"{}","path_from":"{}","host_to":"{}","port_to":{},"login_to":"{}","password_to":"{}","path_to":"{}","age":{},"filename_regexp":"{}"}}"#,
-            fields[0],  // host_from
-            fields[1],  // port_from
-            fields[2],  // login_from
-            fields[3],  // password_from
-            fields[4],  // path_from
-            fields[5],  // host_to
-            fields[6],  // port_to
-            fields[7],  // login_to
-            fields[8],  // password_to
-            fields[9],  // path_to
-            fields[10], // age
-            fields[11]  // filename_regexp
-        );
+        let json_value = json!({
+            "host_from": fields[0],
+            "port_from": port_from,
+            "login_from": fields[2],
+            "password_from": fields[3],
+            "path_from": fields[4],
+            "host_to": fields[5],
+            "port_to": port_to,
+            "login_to": fields[7],
+            "password_to": fields[8],
+            "path_to": fields[9],
+            "age": age,
+            "filename_regexp": fields[11]
+        });
+
+        let jsonl = json_value.to_string();
 
         output_lines.push(jsonl);
     }
@@ -115,6 +139,7 @@ mod tests {
     use std::io::{BufRead, BufReader, Write};
     use std::fs::File;
     use tempfile::tempdir;
+    use serde_json::json;
 
     fn convert_csv_to_jsonl_internal(input_path: &str, _output_path: &str) -> Result<String, String> {
         // Read input CSV file
@@ -152,15 +177,37 @@ mod tests {
                 continue;
             }
 
-            // Convert to JSONL format
-            let jsonl = format!(
-                r#"{{"host_from":"{}","port_from":{},"login_from":"{}","password_from":"{}","path_from":"{}","host_to":"{}","port_to":{},"login_to":"{}","password_to":"{}","path_to":"{}","age":{},"filename_regexp":"{}"}}"#,
-                fields[0], fields[1], fields[2], fields[3], fields[4],
-                fields[5], fields[6], fields[7], fields[8], fields[9],
-                fields[10], fields[11]
-            );
+            // Parse port and age as numbers for proper JSON serialization
+            let port_from: u16 = match fields[1].parse() {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
+            let port_to: u16 = match fields[6].parse() {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
+            let age: u64 = match fields[10].parse() {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
 
-            output_lines.push(jsonl);
+            // Convert to JSONL format using serde_json for proper escaping
+            let json_value = json!({
+                "host_from": fields[0],
+                "port_from": port_from,
+                "login_from": fields[2],
+                "password_from": fields[3],
+                "path_from": fields[4],
+                "host_to": fields[5],
+                "port_to": port_to,
+                "login_to": fields[7],
+                "password_to": fields[8],
+                "path_to": fields[9],
+                "age": age,
+                "filename_regexp": fields[11]
+            });
+
+            output_lines.push(json_value.to_string());
         }
 
         Ok(output_lines.join("\n"))
@@ -184,9 +231,8 @@ mod tests {
         let jsonl = result.unwrap();
         assert!(jsonl.contains(r#""host_from":"192.168.1.1""#));
         assert!(jsonl.contains(r#""port_from":21"#));
-        // The actual output has single backslash: .*\.txt$
-        assert!(jsonl.contains(r#""filename_regexp":".*\"#));
-        assert!(jsonl.contains(r#".txt$""#));
+        // With serde_json, backslashes are properly escaped for JSON
+        assert!(jsonl.contains(r#""filename_regexp":".*\\.txt$""#));
     }
 
     #[test]
