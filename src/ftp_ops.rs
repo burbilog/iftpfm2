@@ -110,6 +110,29 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
         return 0;
     }
 
+    // Set binary mode once for both connections (outside the file loop)
+    if let Err(e) = ftp_from.transfer_type(ftp::types::FileType::Binary) {
+        let _ = log_with_thread(format!(
+            "Error setting binary mode on SOURCE FTP server: {}",
+            e
+        )
+        .as_str(), Some(thread_id));
+        let _ = ftp_to.quit();
+        let _ = ftp_from.quit();
+        return 0;
+    }
+
+    if let Err(e) = ftp_to.transfer_type(ftp::types::FileType::Binary) {
+        let _ = log_with_thread(format!(
+            "Error setting binary mode on TARGET FTP server: {}",
+            e
+        )
+        .as_str(), Some(thread_id));
+        let _ = ftp_to.quit();
+        let _ = ftp_from.quit();
+        return 0;
+    }
+
     // Get the list of files in the source directory
     let file_list = match ftp_from.nlst(None) {
         Ok(list) => list,
@@ -213,24 +236,6 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
 
         // Use temporary filename for atomic transfer: .filename.tmp~
         let tmp_filename = format!(".{}.tmp~", filename);
-
-        if let Err(e) = ftp_from.transfer_type(ftp::types::FileType::Binary) {
-            let _ = log_with_thread(format!(
-                "Error setting binary mode on SOURCE FTP server: {}",
-                e
-            )
-            .as_str(), Some(thread_id));
-            continue;
-        }
-
-        if let Err(e) = ftp_to.transfer_type(ftp::types::FileType::Binary) {
-            let _ = log_with_thread(format!(
-                "Error setting binary mode on TARGET FTP server: {}",
-                e
-            )
-            .as_str(), Some(thread_id));
-            continue;
-        }
 
         // Transfer to temporary file first for atomicity
         match ftp_from.simple_retr(filename.as_str()) {
