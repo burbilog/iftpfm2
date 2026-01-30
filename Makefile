@@ -19,6 +19,7 @@ test:
 	cargo build # Ensure binary is built before testing
 	cargo test
 	./test.sh
+	./test_age.sh
 
 # generate and install rust documentation (always rebuilds)
 .PHONY: doc
