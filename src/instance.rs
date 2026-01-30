@@ -1,17 +1,21 @@
 use crate::logging::log;
 use crate::shutdown::request_shutdown;
 
-use std::fs::File;
-use std::io::{self, Write, Read};
+use std::fs::OpenOptions;
+use std::io::{self, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use std::thread;
 use ctrlc;
+use fs2::FileExt;
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
 /// Global storage for the socket listener thread join handle
 static LISTENER_HANDLE: Lazy<Mutex<Option<thread::JoinHandle<()>>>> = Lazy::new(|| Mutex::new(None));
+
+/// Global storage for the lock file handle (kept locked for program lifetime)
+static LOCK_FILE_HANDLE: Lazy<Mutex<Option<std::fs::File>>> = Lazy::new(|| Mutex::new(None));
 
 // Signal the existing process to terminate gracefully
 fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Result<()> {
@@ -105,53 +109,107 @@ fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Res
     Ok(())
 }
 
-/// Ensures only one instance runs at a time
+/// Ensures only one instance runs at a time using atomic file locking
 ///
 /// # Behavior
-/// - Creates lock file with PID
-/// - Listens on Unix socket for shutdown requests
-/// - Handles cleanup on exit
+/// - Uses flock() on PID file for atomic single-instance enforcement
+/// - Creates socket for shutdown requests from new instances
+/// - Handles cleanup on exit via scopeguard
 ///
 /// # Errors
-/// - If socket creation fails
-/// - If PID file can't be written
+/// - If another instance is running (returns Err, caller should exit)
+/// - If lock file creation fails
+///
+/// # Race Condition Protection
+/// The flock() system call is atomic - even if two processes execute
+/// try_lock() simultaneously, only one will succeed.
 ///
 /// # Panics
 /// If signal handler registration fails
 pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
-    let socket_path = format!("/tmp/{}.sock", crate::PROGRAM_NAME); // Using PROGRAM_NAME from lib.rs
+    let socket_path = format!("/tmp/{}.sock", crate::PROGRAM_NAME);
+    let pid_path = format!("/tmp/{}.pid", crate::PROGRAM_NAME);
 
-    // Try to connect to existing socket
-    if UnixStream::connect(&socket_path).is_ok() {
-        let _ = log(&format!("Another instance is running, new instance PID {} requesting graceful termination of old one.",
-            std::process::id()));
-
-        // Try to signal the process to terminate gracefully
-        if let Err(e) = signal_process_to_terminate(&socket_path, grace_seconds) {
-            let _ = log(&format!("Failed to signal old process: {}. Stale socket/pid files might exist.", e));
-            // Even if signaling fails, we might be able to remove the socket if it's stale.
+    // ATOMIC: Try to acquire exclusive lock on PID file
+    // This is the critical race-condition-free operation
+    let mut lock_file = match OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(&pid_path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            return Err(io::Error::new(
+                e.kind(),
+                format!("Failed to open lock file {}: {}", pid_path, e)
+            ));
         }
+    };
 
-        // Attempt to clean up the socket file after signaling (or if signaling failed but socket was stale)
-        // This is important so the new instance can bind to it.
-        let _ = std::fs::remove_file(&socket_path);
-        let _ = log(&format!("Removed old socket file: {}", socket_path));
+    // Try to lock the file - this is atomic via flock()
+    if lock_file.try_lock_exclusive().is_err() {
+        // Lock failed - another instance is running
+        let _ = log(&format!("Another instance is already running (PID file {} is locked)", pid_path));
 
-    } else {
-        // If connection failed, it might be because the socket file is stale (no one listening).
-        // Clean it up before trying to bind.
-        let _ = std::fs::remove_file(&socket_path);
+        // Try to signal the existing instance to terminate
+        if UnixStream::connect(&socket_path).is_ok() {
+            let _ = log(&format!("New instance PID {} requesting graceful termination of old instance.",
+                std::process::id()));
+
+            if let Err(e) = signal_process_to_terminate(&socket_path, grace_seconds) {
+                let _ = log(&format!("Failed to signal old process: {}", e));
+            }
+
+            // After termination, try to acquire lock again
+            match lock_file.try_lock_exclusive() {
+                Ok(_) => {
+                    let _ = log("Successfully acquired lock after old instance terminated");
+                }
+                Err(_) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AddrInUse,
+                        "Another instance is still running. Exiting."
+                    ));
+                }
+            }
+        } else {
+            // Socket exists but can't connect - stale state, try cleanup
+            let _ = std::fs::remove_file(&socket_path);
+            match lock_file.try_lock_exclusive() {
+                Ok(_) => {
+                    let _ = log("Successfully acquired lock after cleaning up stale socket");
+                }
+                Err(_) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AddrInUse,
+                        "Another instance is running. Exiting."
+                    ));
+                }
+            }
+        }
     }
 
-    // Create a new socket file for this instance
-    let listener = UnixListener::bind(&socket_path)?;
-    let _ = log(&format!("Created new socket file: {}", socket_path));
+    // We hold the lock - we are the single instance
+    // Write our PID to the file
+    if let Err(e) = lock_file.write_all(std::process::id().to_string().as_bytes()) {
+        return Err(io::Error::new(
+            e.kind(),
+            format!("Failed to write PID to {}: {}", pid_path, e)
+        ));
+    }
+    let _ = log(&format!("Acquired exclusive lock on {}, PID {}", pid_path, std::process::id()));
 
-    // Write our PID to a common PID file location
-    let pid_path = format!("/tmp/{}.pid", crate::PROGRAM_NAME); // Using PROGRAM_NAME from lib.rs
-    let mut pid_file = File::create(&pid_path)?;
-    pid_file.write_all(std::process::id().to_string().as_bytes())?;
-    let _ = log(&format!("Written current PID {} to {}", std::process::id(), pid_path));
+    // Store lock file handle globally so lock remains held for program lifetime
+    if let Ok(mut guard) = LOCK_FILE_HANDLE.lock() {
+        *guard = Some(lock_file);
+    }
+
+    // Clean up any stale socket file
+    let _ = std::fs::remove_file(&socket_path);
+
+    // Create a new socket for shutdown requests
+    let listener = UnixListener::bind(&socket_path)?;
+    let _ = log(&format!("Created socket file: {}", socket_path));
 
     // Set up signal handler for SIGINT (Ctrl+C) and SIGTERM
     // NOTE: This handler is async-signal-safe. It only sets atomic flags.
@@ -222,10 +280,15 @@ pub fn join_listener_thread() {
 ///
 /// Called automatically on program exit (e.g., via scopeguard in main)
 pub fn cleanup_lock_file() {
-    let socket_path = format!("/tmp/{}.sock", crate::PROGRAM_NAME); // Using PROGRAM_NAME from lib.rs
-    let pid_path = format!("/tmp/{}.pid", crate::PROGRAM_NAME); // Using PROGRAM_NAME from lib.rs
+    let socket_path = format!("/tmp/{}.sock", crate::PROGRAM_NAME);
+    let pid_path = format!("/tmp/{}.pid", crate::PROGRAM_NAME);
 
     let _ = log(&format!("Cleaning up lock files: {} and {}", socket_path, pid_path));
+
+    // Release the file lock by closing the file handle
+    if let Ok(mut guard) = LOCK_FILE_HANDLE.lock() {
+        *guard = None; // Drop the File, which releases the flock
+    }
 
     if let Err(e) = std::fs::remove_file(&socket_path) {
         if e.kind() != std::io::ErrorKind::NotFound {
