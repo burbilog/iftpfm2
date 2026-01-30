@@ -1,4 +1,2 @@
-var srcIndex = new Map(JSON.parse('[\
-["iftpfm2",["",[],["main.rs"]]]\
-]'));
-createSrcSidebar();
+createSrcSidebar('[["iftpfm2",["",[],["cli.rs","config.rs","ftp_ops.rs","instance.rs","lib.rs","logging.rs","shutdown.rs"]]],["migrate_csv_to_jsonl",["",[],["migrate_csv_to_jsonl.rs"]]]]');
+//{"start":19,"fragment_lengths":[105,61]}

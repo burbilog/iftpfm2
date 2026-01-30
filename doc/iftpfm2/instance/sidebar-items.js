@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_single_instance","cleanup_lock_file"]};

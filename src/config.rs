@@ -64,7 +64,7 @@ pub struct Config {
 /// host_to, port_to, login_to, password_to, path_to, age, filename_regexp
 ///
 /// # Example
-/// ```
+/// ```text
 /// // let configs = parse_config("settings.jsonl")?;
 /// ```
 pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {

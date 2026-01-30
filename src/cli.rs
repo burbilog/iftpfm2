@@ -27,7 +27,7 @@ pub fn print_usage() {
 /// - If numeric arguments can't be parsed
 ///
 /// # Example
-/// ```
+/// ```text
 /// // let (delete, log_file, config_file, parallel, randomize, grace_seconds) = parse_args();
 /// ```
 pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64) {

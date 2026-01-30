@@ -36,7 +36,7 @@ pub static LOG_FILE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None)
 /// * `io::Result<()>` - Ok on success, Err if writing fails
 ///
 /// # Example
-/// ```
+/// ```text
 /// // log("Starting transfer").unwrap();
 /// ```
 pub fn log(message: &str) -> io::Result<()> {
@@ -55,7 +55,7 @@ pub fn log(message: &str) -> io::Result<()> {
 /// * `io::Result<()>` - Ok on success, Err if writing fails
 ///
 /// # Example
-/// ```
+/// ```text
 /// // log_with_thread("Thread started", Some(1)).unwrap();
 /// ```
 pub fn log_with_thread(message: &str, thread_id: Option<usize>) -> io::Result<()> {

@@ -24,7 +24,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH}; // Moved Duration and UNIX_EP
 /// - Logs detailed transfer progress
 ///
 /// # Example
-/// ```
+/// ```text
 /// // let count = transfer_files(&config, true, 1);
 /// ```
 pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {

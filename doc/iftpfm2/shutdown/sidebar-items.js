@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["is_shutdown_requested","request_shutdown"],"static":["SHUTDOWN_REQUESTED"]};
