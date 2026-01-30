@@ -39,10 +39,16 @@ make doc
 cargo doc --open
 ```
 
-**Integration test (`test.sh`) prerequisites:**
-- Python 3 with `pyftpdlib` installed
-- Starts two FTP servers on ports 2121/2122
-- Creates temp files and verifies transfer behavior
+**Integration tests:**
+- `test.sh` - Basic FTP transfer test
+  - Prerequisites: Python 3 with `pyftpdlib` installed
+  - Starts two FTP servers on ports 2121/2122
+  - Creates temp files and verifies transfer behavior
+- `test_age.sh` - File age filtering test
+- `test_conn_timeout.sh` - Connection timeout test
+- `test_ftps.sh` - FTPS with self-signed certificates test
+  - Generates self-signed certificate using openssl
+  - Tests with and without `--insecure-skip-verify` flag
 
 ## Project Architecture
 
@@ -87,22 +93,33 @@ cargo doc --open
 - In non-test code, logging failures never panic (uses `let _ =`)
 
 **FTP Transfer Flow (per config entry):**
-1. Connect to source FTP, login, CWD to path
-2. Connect to target FTP, login, CWD to path
-3. Get file list via NLST
-4. For each file:
+1. Connect to source FTP/FTPS (using `connect_server()` with protocol from `proto_from`)
+2. Connect to target FTP/FTPS (using `connect_server()` with protocol from `proto_to`)
+3. Login to both servers
+4. CWD to path on both servers
+5. Set binary mode once on both connections (outside the file loop)
+6. Get file list via NLST from source
+7. For each file:
    - Check regex match
    - Get MDTM (modified time)
    - Check file age
    - Delete from target if exists
-   - Set binary mode on both connections
-   - Transfer via `simple_retr()` + `put()`
+   - Transfer via `retr()` + `put_file()` to temporary file
+   - Rename temporary file to final name
    - Delete from source if `-d` flag
-5. Call `quit()` on both connections
-6. Log summary
+8. Call `quit()` on both connections
+9. Log summary
+
+**FTPS Support:**
+- Protocol selected via `proto_from`/`proto_to` config fields (`ftp` or `ftps`)
+- For FTPS, `connect_server()` creates a `TlsConnector` and calls `into_secure()`
+- Use `--insecure-skip-verify` CLI flag to bypass certificate verification (for self-signed certs)
+- Default: `TlsConnector::new()` - verifies certificates
+- With flag: `TlsConnector::builder().danger_accept_invalid_certs(true).build()`
 
 **Config Validation:**
 - All fields validated during parsing (non-empty hosts/logins/passwords/paths, ports > 0, age > 0, valid regex)
+- `proto_from` and `proto_to` default to `Protocol::Ftp` if not specified
 - Regex pattern validated once during parsing (not re-validated during transfer)
 
 ## Important Implementation Notes
@@ -130,7 +147,13 @@ cargo doc --open
 **Testing:**
 - Unit tests use `serial_test` for tests that modify global state
 - `reset_shutdown_for_tests()` available to reset shutdown flag between tests
-- Integration test (`test.sh`) uses real FTP servers
+- Integration tests use real FTP/FTPS servers (test.sh, test_ftps.sh, test_conn_timeout.sh, test_age.sh)
+
+**Connection Timeout:**
+- Configurable via `-t seconds` CLI flag (default: 30 seconds)
+- Passed to `connect_server()` as `Duration`
+- Applied via `connect_timeout()` methods for both FTP and FTPS
+- Error messages include the timeout value for debugging
 
 ## Common Issues to Avoid
 

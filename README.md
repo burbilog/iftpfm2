@@ -130,11 +130,13 @@ Where:
 - `login_from`: Source FTP username (string)
 - `password_from`: Source FTP password (string)
 - `path_from`: Source directory path (must be literal path, no wildcards)
+- `proto_from`: Source protocol - "ftp" or "ftps" (optional, default: "ftp")
 - `host_to`: Destination FTP server hostname/IP (string)
 - `port_to`: Destination FTP port (number, typically 21)
 - `login_to`: Destination FTP username (string)
 - `password_to`: Destination FTP password (string)
 - `path_to`: Destination directory path (string)
+- `proto_to`: Destination protocol - "ftp" or "ftps" (optional, default: "ftp")
 - `age`: Minimum file age to transfer (seconds, number)
 - `filename_regexp`: Regular expression pattern to match files (string)
 
@@ -159,6 +161,8 @@ You can also use the following options:
     -p number: Set number of parallel threads to use (default: 1)
     -r: Randomize processing order of configuration entries
     -g seconds: Grace period for shutdown in seconds (default: 30)
+    -t seconds: Connection timeout in seconds (default: 30)
+    --insecure-skip-verify: Skip TLS certificate verification for FTPS connections (use with caution)
 
 Single Instance Behavior:
 - Only one instance can run at a time
@@ -193,6 +197,18 @@ Add this text to config.jsonl and run iftpfm2 to copy files using this config fi
 
 ```
 iftpfm2 -d config.jsonl
+```
+
+FTPS with self-signed certificates:
+
+```
+{"host_from":"ftps.example.com","port_from":21,"login_from":"user1","password_from":"pass1","path_from":"/outgoing","proto_from":"ftps","host_to":"ftps.example.com","port_to":21,"login_to":"user2","password_from":"pass2","path_to":"/incoming","proto_to":"ftps","age":86400,"filename_regexp":".*\\.csv$"}
+```
+
+Run with `--insecure-skip-verify` to skip certificate verification (use only for testing/trusted environments):
+
+```
+iftpfm2 --insecure-skip-verify config.jsonl
 ```
 
 Author
