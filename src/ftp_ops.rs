@@ -245,6 +245,17 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
                             Ok(_) => {
                                 let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
                                 successful_transfers += 1;
+                                // Delete source file only after successful transfer
+                                if delete {
+                                    match ftp_from.rm(filename.as_str()) {
+                                        Ok(_) => {
+                                            let _ = log_with_thread(format!("Deleted SOURCE file {}", filename).as_str(), Some(thread_id));
+                                        }
+                                        Err(e) => {
+                                            let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e).as_str(), Some(thread_id));
+                                        }
+                                    }
+                                }
                             }
                             Err(_) => {
                                 // Rename failed, likely because target file exists
@@ -260,6 +271,17 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
                                     Ok(_) => {
                                         let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
                                         successful_transfers += 1;
+                                        // Delete source file only after successful transfer
+                                        if delete {
+                                            match ftp_from.rm(filename.as_str()) {
+                                                Ok(_) => {
+                                                    let _ = log_with_thread(format!("Deleted SOURCE file {}", filename).as_str(), Some(thread_id));
+                                                }
+                                                Err(e) => {
+                                                    let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e).as_str(), Some(thread_id));
+                                                }
+                                            }
+                                        }
                                     }
                                     Err(e) => {
                                         let _ = log_with_thread(format!(
@@ -291,17 +313,6 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize) -> i32 {
                     filename, e
                 )
                 .as_str(), Some(thread_id));
-            }
-        }
-
-        if delete {
-            match ftp_from.rm(filename.as_str()) {
-                Ok(_) => {
-                    let _ = log_with_thread(format!("Deleted SOURCE file {}", filename).as_str(), Some(thread_id));
-                }
-                Err(e) => {
-                    let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e).as_str(), Some(thread_id));
-                }
             }
         }
     }
