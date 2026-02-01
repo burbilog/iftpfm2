@@ -9,11 +9,13 @@
 # login_from: the login to use to connect to the FTP server to transfer files from
 # password_from: the password to use to connect to the FTP server to transfer files from
 # path_from: the path on the FTP server to transfer files from
+# proto_from: source protocol - "ftp" (default) or "ftps"
 # host_to: the IP address/hostname of the FTP server to transfer files to
 # port_to: the port of the FTP server to transfer files to
 # login_to: the login to use to connect to the FTP server to transfer files to
 # password_to: the password to use to connect to the FTP server to transfer files to
 # path_to: the path on the FTP server to transfer files to
+# proto_to: target protocol - "ftp" (default) or "ftps"
 # age: the age in seconds of the files to transfer, files younger than age seconds are ignored
 # filename_regexp: regular expression pattern to match files in specified source path (string)
 
@@ -22,3 +24,7 @@
 
 # This is a config line to transfer all .txt files older than 1 week from 192.168.0.3 to 192.168.0.4
 {"host_from":"192.168.0.3","port_from":21,"login_from":"user3","password_from":"password3","path_from":"/path/to/source/dir/","host_to":"192.168.0.4","port_to":21,"login_to":"user4","password_to":"password4","path_to":"/path/to/target/dir","age":604800,"filename_regexp":".*\\.txt$"}
+
+# This is a config line to transfer .csv files via FTPS (with TLS encryption)
+# Use --insecure-skip-verify flag for self-signed certificates
+{"host_from":"ftps.example.com","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/outgoing/","proto_from":"ftps","host_to":"ftps.example.com","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/incoming/","proto_to":"ftps","age":86400,"filename_regexp":".*\\.csv$"}
