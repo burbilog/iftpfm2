@@ -26,10 +26,7 @@ fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Res
         .output()?;
 
     if !output.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Failed to find process using lsof"
-        ));
+        return Err(io::Error::other("Failed to find process using lsof"));
     }
 
     let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -59,8 +56,7 @@ fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Res
 
     if !term_output.status.success() {
         let stderr = String::from_utf8_lossy(&term_output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             format!("Failed to send termination signal to process {}: {}", pid_str, stderr)
         ));
     }
@@ -97,8 +93,7 @@ fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Res
 
     if !kill_output.status.success() {
         let stderr = String::from_utf8_lossy(&kill_output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             format!("Failed to force termination of process {}: {}", pid_str, stderr)
         ));
     }
@@ -135,6 +130,7 @@ pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
     let mut lock_file = match OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(&pid_path)
     {
         Ok(f) => f,
@@ -217,14 +213,13 @@ pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
     let mut signals = Signals::new([SIGINT, SIGTERM]).expect("Error setting signal handler");
 
     let _signal_handle = thread::spawn(move || {
-        for sig in signals.forever() {
+        if let Some(sig) = signals.forever().next() {
             let signal_type = match sig {
                 SIGINT => 1,
                 SIGTERM => 2,
                 _ => 1,
             };
             crate::shutdown::request_shutdown_with_signal(signal_type);
-            break;
         }
     });
 

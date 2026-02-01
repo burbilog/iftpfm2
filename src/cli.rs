@@ -1,6 +1,19 @@
 use std::env;
 use std::process;
 
+/// Command line arguments parsed into a struct
+#[derive(Debug, PartialEq)]
+pub struct CliArgs {
+    pub delete: bool,
+    pub log_file: Option<String>,
+    pub config_file: Option<String>,
+    pub parallel: usize,
+    pub randomize: bool,
+    pub grace_seconds: u64,
+    pub connect_timeout: Option<u64>,
+    pub insecure_skip_verify: bool,
+}
+
 /// Prints usage instructions for the program.
 ///
 /// Uses `PROGRAM_NAME` constant from `crate` for the executable name.
@@ -14,15 +27,7 @@ pub fn print_usage() {
 /// Parses command line arguments and returns configuration options
 ///
 /// # Returns
-/// A tuple containing:
-/// - `bool`: Whether to delete source files after transfer
-/// - `Option<String>`: Path to log file (None for stdout).
-/// - `Option<String>`: Path to config file.
-/// - `usize`: Number of parallel threads.
-/// - `bool`: Whether to randomize processing order.
-/// - `u64`: Grace period in seconds for shutdown.
-/// - `Option<u64>`: Connection timeout in seconds (None = 30s default).
-/// - `bool`: Whether to skip TLS certificate verification (FTPS only).
+/// A `CliArgs` struct containing all parsed command line arguments.
 ///
 /// # Panics
 /// - If required arguments are missing
@@ -30,9 +35,10 @@ pub fn print_usage() {
 ///
 /// # Example
 /// ```text
-/// // let (delete, log_file, config_file, parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify) = parse_args();
+/// // let args = parse_args();
+/// // let delete = args.delete;
 /// ```
-pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, Option<u64>, bool) {
+pub fn parse_args() -> CliArgs {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
@@ -134,5 +140,14 @@ pub fn parse_args() -> (bool, Option<String>, Option<String>, usize, bool, u64, 
         process::exit(1);
     }
 
-    (delete, log_file, config_file, parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify)
+    CliArgs {
+        delete,
+        log_file,
+        config_file,
+        parallel,
+        randomize,
+        grace_seconds,
+        connect_timeout,
+        insecure_skip_verify,
+    }
 }

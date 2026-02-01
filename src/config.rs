@@ -6,19 +6,14 @@ use std::fmt;
 use zeroize::Zeroize;
 
 /// FTP/FTPS protocol type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
     /// Standard FTP (unencrypted)
+    #[default]
     Ftp,
     /// FTP over TLS/SSL (encrypted)
     Ftps,
-}
-
-impl Default for Protocol {
-    fn default() -> Self {
-        Protocol::Ftp
-    }
 }
 
 impl fmt::Display for Protocol {

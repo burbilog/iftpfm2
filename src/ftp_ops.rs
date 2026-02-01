@@ -110,7 +110,7 @@ fn connect_server(
 ) -> Result<FtpStreamWrapper, suppaftp::FtpError> {
     let addrs: Vec<std::net::SocketAddr> = (hostname, port)
         .to_socket_addrs()
-        .map_err(|e| suppaftp::FtpError::ConnectionError(e))?
+        .map_err(suppaftp::FtpError::ConnectionError)?
         .collect();
 
     if addrs.is_empty() {
@@ -125,7 +125,7 @@ fn connect_server(
         let result = match protocol {
             Protocol::Ftp => {
                 FtpStream::connect_timeout(addr, timeout)
-                    .map(|s| FtpStreamWrapper::Ftp(s))
+                    .map(FtpStreamWrapper::Ftp)
             }
             Protocol::Ftps => {
                 // For FTPS, we need to establish TLS connection
@@ -135,12 +135,12 @@ fn connect_server(
                         suppaftp::native_tls::TlsConnector::builder()
                             .danger_accept_invalid_certs(true)
                             .build()
-                            .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+                            .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::other(e)))?
                     )
                 } else {
                     NativeTlsConnector::from(
                         suppaftp::native_tls::TlsConnector::new()
-                            .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+                            .map_err(|e| suppaftp::FtpError::ConnectionError(std::io::Error::other(e)))?
                     )
                 };
 
@@ -149,7 +149,7 @@ fn connect_server(
                     Ok(secure_stream) => {
                         // Switch to secure mode
                         secure_stream.into_secure(tls_connector, hostname)
-                            .map(|s| FtpStreamWrapper::Ftps(s))
+                            .map(FtpStreamWrapper::Ftps)
                     }
                     Err(e) => Err(e),
                 }
@@ -342,7 +342,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let datetime_naive = match ftp_from.mdtm(filename.as_str()) {
             Ok(dt) => dt,
             Err(e) => {
-                let _ = log_with_thread(&format!(
+                let _ = log_with_thread(format!(
                     "Error getting modified time for file '{}': {}, skipping",
                     filename,
                     e.to_string().replace("\n", "")
@@ -357,7 +357,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
             let secs = datetime_naive.and_utc().timestamp();
             let nanos = datetime_naive.and_utc().timestamp_subsec_nanos();
             if secs < 0 {
-                let _ = log_with_thread(&format!(
+                let _ = log_with_thread(format!(
                     "File '{}' has a pre-epoch modification time ({}), skipping",
                     filename, datetime_naive
                 ), Some(thread_id));
@@ -369,7 +369,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let file_age_seconds = match SystemTime::now().duration_since(modified_system_time) {
             Ok(duration) => duration.as_secs(),
             Err(_) => {
-                let _ = log_with_thread(&format!(
+                let _ = log_with_thread(format!(
                     "File '{}' has a modification time in the future ({} vs now), skipping",
                     filename, datetime_naive
                 ), Some(thread_id));
@@ -426,11 +426,8 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                             Err(_) => {
                                 // Rename failed, likely because target file exists
                                 // Delete old file and retry rename
-                                match ftp_to.rm(filename.as_str()) {
-                                    Ok(_) => {
-                                        let _ = log_with_thread(format!("Replaced existing file {}", filename), Some(thread_id));
-                                    }
-                                    Err(_) => () // Ignore error if file somehow disappeared
+                                if ftp_to.rm(filename.as_str()).is_ok() {
+                                    let _ = log_with_thread(format!("Replaced existing file {}", filename), Some(thread_id));
                                 }
 
                                 match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {

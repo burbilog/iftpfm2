@@ -37,7 +37,8 @@ use std::process; // For process::exit
 fn main() {
     // Parse arguments first to setup logging
     // These functions are now part of the library, accessed via the use statement.
-    let (delete, log_file_option, config_file_option, parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify) =
+    let cli::CliArgs { delete, log_file: log_file_option, config_file: config_file_option,
+                       parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify } =
         parse_args(); // from iftpfm2::cli
 
     if let Some(lf) = log_file_option {
@@ -58,7 +59,7 @@ fn main() {
         cleanup_lock_file();
     });
 
-    let _ = log(&format!("{} version {} started", PROGRAM_NAME, PROGRAM_VERSION).as_str()); // PROGRAM_NAME & VERSION from lib.rs
+    let _ = log(format!("{} version {} started", PROGRAM_NAME, PROGRAM_VERSION).as_str()); // PROGRAM_NAME & VERSION from lib.rs
 
     // Watch for shutdown signals and log them in the main thread (not in signal handler)
     // This is async-signal-safe: we only poll atomic flags here

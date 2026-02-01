@@ -33,6 +33,8 @@ static LOG_FILE_HANDLE: Lazy<Mutex<Option<BufWriter<File>>>> = Lazy::new(|| Mute
 /// # Returns
 ///
 /// * `io::Result<()>` - Ok if the logging was successful, Err otherwise
+///   Logs a message.
+///
 /// Logs a message with timestamp to configured output
 ///
 /// # Arguments
