@@ -54,7 +54,7 @@ pub fn log(message: &str) -> io::Result<()> {
 /// Used when running in parallel mode to distinguish threads
 ///
 /// # Arguments
-/// * `message` - The message to log
+/// * `message` - The message to log (accepts anything that can be referenced as a str)
 /// * `thread_id` - Optional thread identifier
 ///
 /// # Returns
@@ -63,13 +63,15 @@ pub fn log(message: &str) -> io::Result<()> {
 /// # Example
 /// ```text
 /// // log_with_thread("Thread started", Some(1)).unwrap();
+/// // log_with_thread(format!("Value: {}", x), Some(1)).unwrap();
 /// ```
-pub fn log_with_thread(message: &str, thread_id: Option<usize>) -> io::Result<()> {
+pub fn log_with_thread<T: AsRef<str>>(message: T, thread_id: Option<usize>) -> io::Result<()> {
     // Generate a timestamp for the log message
     let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let message_ref = message.as_ref();
     let log_message = match thread_id {
-        Some(tid) => format!("{} [T{}] {}\n", timestamp, tid, message),
-        None => format!("{} {}\n", timestamp, message),
+        Some(tid) => format!("{} [T{}] {}\n", timestamp, tid, message_ref),
+        None => format!("{} {}\n", timestamp, message_ref),
     };
 
     // Lock the mutex and check if a log file has been set

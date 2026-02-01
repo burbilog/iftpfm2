@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::fmt;
+use zeroize::Zeroize;
 
 /// FTP/FTPS protocol type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -76,6 +77,14 @@ pub struct Config {
     pub filename_regexp: String,
 }
 
+impl Drop for Config {
+    fn drop(&mut self) {
+        // Zeroize passwords when Config is dropped to protect sensitive data in memory
+        self.password_from.zeroize();
+        self.password_to.zeroize();
+    }
+}
+
 impl Config {
     /// Validates configuration field values
     ///
@@ -85,6 +94,7 @@ impl Config {
     ///
     /// # Validation Rules
     /// - Host addresses must be non-empty
+    /// - Host addresses must not contain invalid characters (spaces, slashes)
     /// - Ports must be non-zero
     /// - Logins must be non-empty
     /// - Passwords must be non-empty
@@ -104,6 +114,20 @@ impl Config {
                 ErrorKind::InvalidInput,
                 "host_to cannot be empty"
             ));
+        }
+
+        // Validate host addresses for invalid characters
+        for (host, field_name) in [
+            (&self.ip_address_from, "host_from"),
+            (&self.ip_address_to, "host_to"),
+        ] {
+            // Check for invalid characters that shouldn't appear in hostnames/IPs
+            if host.contains('/') || host.contains('\\') || host.contains(' ') {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("{} contains invalid characters", field_name)
+                ));
+            }
         }
 
         // Validate ports
@@ -508,5 +532,68 @@ mod tests {
             filename_regexp: ".*".to_string(),
         };
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_validate_invalid_host_characters() {
+        let config = Config {
+            ip_address_from: "192.168.1.1/invalid".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_invalid_host_characters_backslash() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
+            ip_address_to: "192.168\\1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_invalid_host_characters_space() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: "pass".to_string(),
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
+            ip_address_to: "192.168.1.2 invalid".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: "pass2".to_string(),
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
     }
 }

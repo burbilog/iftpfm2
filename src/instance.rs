@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use std::thread;
-use ctrlc;
+use signal_hook::{iterator::Signals, consts::SIGTERM, consts::SIGINT};
 use fs2::FileExt;
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
@@ -214,10 +214,19 @@ pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
     // Set up signal handler for SIGINT (Ctrl+C) and SIGTERM
     // NOTE: This handler is async-signal-safe. It only sets atomic flags.
     // Logging is deferred to the main thread.
-    ctrlc::set_handler(|| {
-        // Signal type 1 = SIGINT (Ctrl+C)
-        crate::shutdown::request_shutdown_with_signal(1);
-    }).expect("Error setting signal handler");
+    let mut signals = Signals::new([SIGINT, SIGTERM]).expect("Error setting signal handler");
+
+    let _signal_handle = thread::spawn(move || {
+        for sig in signals.forever() {
+            let signal_type = match sig {
+                SIGINT => 1,
+                SIGTERM => 2,
+                _ => 1,
+            };
+            crate::shutdown::request_shutdown_with_signal(signal_type);
+            break;
+        }
+    });
 
     // Spawn a thread to listen on the socket for shutdown commands from new instances.
     let handle = thread::spawn(move || {

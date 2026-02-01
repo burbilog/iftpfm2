@@ -205,8 +205,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         "Transferring files from {}://{}:{}{} to {}://{}:{}{}",
         config.proto_from, config.ip_address_from, config.port_from, config.path_from,
         config.proto_to, config.ip_address_to, config.port_to, config.path_to
-    )
-    .as_str(), Some(thread_id));
+    ), Some(thread_id));
 
     let timeout = Duration::from_secs(connect_timeout.unwrap_or(30));
 
@@ -223,8 +222,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
             let _ = log_with_thread(format!(
                 "Error connecting to SOURCE FTP server {}:{} ({}s timeout): {}",
                 config.ip_address_from, config.port_from, connect_timeout.unwrap_or(30), e
-            )
-            .as_str(), Some(thread_id));
+            ), Some(thread_id));
             return 0;
         }
     };
@@ -233,8 +231,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let _ = log_with_thread(format!(
             "Error logging into SOURCE FTP server {}: {}",
             config.ip_address_from, e
-        )
-        .as_str(), Some(thread_id));
+        ), Some(thread_id));
         let _ = ftp_from.quit();
         return 0;
     }
@@ -242,8 +239,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let _ = log_with_thread(format!(
             "Error changing directory on SOURCE FTP server {}: {}",
             config.ip_address_from, e
-        )
-        .as_str(), Some(thread_id));
+        ), Some(thread_id));
         let _ = ftp_from.quit();
         return 0;
     }
@@ -261,8 +257,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
             let _ = log_with_thread(format!(
                 "Error connecting to TARGET FTP server {}:{} ({}s timeout): {}",
                 config.ip_address_to, config.port_to, connect_timeout.unwrap_or(30), e
-            )
-            .as_str(), Some(thread_id));
+            ), Some(thread_id));
             let _ = ftp_from.quit();
             return 0;
         }
@@ -272,8 +267,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let _ = log_with_thread(format!(
             "Error logging into TARGET FTP server {}: {}",
             config.ip_address_to, e
-        )
-        .as_str(), Some(thread_id));
+        ), Some(thread_id));
         let _ = ftp_to.quit();
         let _ = ftp_from.quit();
         return 0;
@@ -282,8 +276,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let _ = log_with_thread(format!(
             "Error changing directory on TARGET FTP server {}: {}",
             config.ip_address_to, e
-        )
-        .as_str(), Some(thread_id));
+        ), Some(thread_id));
         let _ = ftp_to.quit();
         let _ = ftp_from.quit();
         return 0;
@@ -294,8 +287,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let _ = log_with_thread(format!(
             "Error setting binary mode on SOURCE FTP server: {}",
             e
-        )
-        .as_str(), Some(thread_id));
+        ), Some(thread_id));
         let _ = ftp_to.quit();
         let _ = ftp_from.quit();
         return 0;
@@ -305,8 +297,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
         let _ = log_with_thread(format!(
             "Error setting binary mode on TARGET FTP server: {}",
             e
-        )
-        .as_str(), Some(thread_id));
+        ), Some(thread_id));
         let _ = ftp_to.quit();
         let _ = ftp_from.quit();
         return 0;
@@ -316,7 +307,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
     let file_list = match ftp_from.nlst(None) {
         Ok(list) => list,
         Err(e) => {
-            let _ = log_with_thread(format!("Error getting file list from SOURCE FTP server: {}", e).as_str(), Some(thread_id));
+            let _ = log_with_thread(format!("Error getting file list from SOURCE FTP server: {}", e), Some(thread_id));
             let _ = ftp_to.quit();
             let _ = ftp_from.quit();
             return 0;
@@ -326,8 +317,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
     let _ = log_with_thread(format!(
         "Number of files retrieved from SOURCE FTP server: {}",
         file_list.len()
-    )
-    .as_str(), Some(thread_id));
+    ), Some(thread_id));
 
     // Compile regex once for all files (config parser already validated it)
     let regex = Regex::new(&config.filename_regexp).expect("Regex pattern should be valid (validated in config parser)");
@@ -343,8 +333,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
             let _ = log_with_thread(format!(
                 "Skipping file {} as it did not match regex {}",
                 filename, regex
-            )
-            .as_str(), Some(thread_id));
+            ), Some(thread_id));
             continue;
         }
 
@@ -392,13 +381,12 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
             let _ = log_with_thread(format!(
                 "Skipping file {}, it is {} seconds old, less than specified age {} seconds",
                 filename, file_age_seconds, config.age
-            )
-            .as_str(), Some(thread_id));
+            ), Some(thread_id));
             continue;
         }
 
-        // Use temporary filename for atomic transfer: .filename.tmp~
-        let tmp_filename = format!(".{}.tmp~", filename);
+        // Use temporary filename for atomic transfer: .filename.{PID}.tmp
+        let tmp_filename = format!(".{}.{}.tmp", filename, std::process::id());
 
         // Transfer to temporary file first for atomicity
         // suppaftp uses retr() with a reader callback for download
@@ -421,16 +409,16 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
 
                         match rename_result {
                             Ok(_) => {
-                                let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
+                                let _ = log_with_thread(format!("Successful transfer of file {}", filename), Some(thread_id));
                                 successful_transfers += 1;
                                 // Delete source file only after successful transfer
                                 if delete {
                                     match ftp_from.rm(filename.as_str()) {
                                         Ok(_) => {
-                                            let _ = log_with_thread(format!("Deleted SOURCE file {}", filename).as_str(), Some(thread_id));
+                                            let _ = log_with_thread(format!("Deleted SOURCE file {}", filename), Some(thread_id));
                                         }
                                         Err(e) => {
-                                            let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e).as_str(), Some(thread_id));
+                                            let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e), Some(thread_id));
                                         }
                                     }
                                 }
@@ -440,23 +428,23 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                                 // Delete old file and retry rename
                                 match ftp_to.rm(filename.as_str()) {
                                     Ok(_) => {
-                                        let _ = log_with_thread(format!("Replaced existing file {}", filename).as_str(), Some(thread_id));
+                                        let _ = log_with_thread(format!("Replaced existing file {}", filename), Some(thread_id));
                                     }
                                     Err(_) => () // Ignore error if file somehow disappeared
                                 }
 
                                 match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
                                     Ok(_) => {
-                                        let _ = log_with_thread(format!("Successful transfer of file {}", filename).as_str(), Some(thread_id));
+                                        let _ = log_with_thread(format!("Successful transfer of file {}", filename), Some(thread_id));
                                         successful_transfers += 1;
                                         // Delete source file only after successful transfer
                                         if delete {
                                             match ftp_from.rm(filename.as_str()) {
                                                 Ok(_) => {
-                                                    let _ = log_with_thread(format!("Deleted SOURCE file {}", filename).as_str(), Some(thread_id));
+                                                    let _ = log_with_thread(format!("Deleted SOURCE file {}", filename), Some(thread_id));
                                                 }
                                                 Err(e) => {
-                                                    let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e).as_str(), Some(thread_id));
+                                                    let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e), Some(thread_id));
                                                 }
                                             }
                                         }
@@ -465,8 +453,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                                         let _ = log_with_thread(format!(
                                             "Error renaming temporary file {} to {}: {}",
                                             tmp_filename, filename, e
-                                        )
-                                        .as_str(), Some(thread_id));
+                                        ), Some(thread_id));
                                         // Cleanup: try to remove the temporary file
                                         let _ = ftp_to.rm(tmp_filename.as_str());
                                     }
@@ -478,8 +465,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                         let _ = log_with_thread(format!(
                             "Error uploading file {} to TARGET FTP server: {}",
                             filename, e
-                        )
-                        .as_str(), Some(thread_id));
+                        ), Some(thread_id));
                         // Cleanup: try to remove the temporary file
                         let _ = ftp_to.rm(tmp_filename.as_str());
                     }
@@ -489,8 +475,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                 let _ = log_with_thread(format!(
                     "Error transferring file {}: {}",
                     filename, e
-                )
-                .as_str(), Some(thread_id));
+                ), Some(thread_id));
             }
         }
     }
@@ -499,8 +484,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
     let _ = log_with_thread(format!(
         "Successfully transferred {} files out of {}",
         successful_transfers, number_of_files
-    )
-    .as_str(), Some(thread_id));
+    ), Some(thread_id));
     successful_transfers
 }
 
