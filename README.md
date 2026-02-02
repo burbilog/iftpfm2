@@ -163,7 +163,7 @@ You can also use the following options:
     -g seconds: Grace period for shutdown in seconds (default: 30)
     -t seconds: Connection timeout in seconds (default: 30)
     --insecure-skip-verify: Skip TLS certificate verification for FTPS connections (use with caution)
-    --upload-verify: Verify uploaded file size using FTP SIZE command after upload
+    --size-check: Verify uploaded file size using FTP SIZE command after upload
 
 Single Instance Behavior:
 - Only one instance can run at a time

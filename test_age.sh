@@ -3,6 +3,8 @@
 # test_age.sh - Checks age filtering logic
 #
 
+set -e
+
 # Function to cleanup processes on exit (successful or not)
 cleanup() {
     echo "Stopping FTP servers..."

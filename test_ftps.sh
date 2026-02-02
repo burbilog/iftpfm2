@@ -2,7 +2,7 @@
 #
 # iftpfm2 FTPS test script
 # Tests FTPS connections with self-signed certificates using --insecure-skip-verify
-# and upload verification using --upload-verify flag
+# and upload verification using --size-check flag
 # requires python3, pyftpdlib with TLS support, and openssl
 
 set -e
@@ -27,6 +27,7 @@ echo "Creating FTPS server script..."
 cat > "$CERT_DIR/ftps_server.py" << 'PYTHON_SCRIPT'
 import sys
 import os
+import time
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import TLS_FTPHandler
 from pyftpdlib.servers import FTPServer
@@ -55,14 +56,28 @@ if __name__ == "__main__":
     main()
 PYTHON_SCRIPT
 
+# Cleanup trap - ensure servers are killed on exit
+cleanup() {
+    if [ -n "$ftps1_pid" ]; then
+        kill $ftps1_pid 2>/dev/null || true
+    fi
+    if [ -n "$ftps2_pid" ]; then
+        kill $ftps2_pid 2>/dev/null || true
+    fi
+    rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR" 2>/dev/null || true
+    rm -f /tmp/ftps_config.jsonl 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+
 # Start first FTPS server on port 2123
 echo "Starting first FTPS server on port 2123..."
-python3 "$CERT_DIR/ftps_server.py" 2123 /tmp/ftps1 "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" &
+python3 "$CERT_DIR/ftps_server.py" 2123 /tmp/ftps1 "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" 2>/dev/null &
 ftps1_pid=$!
 
 # Start second FTPS server on port 2124
 echo "Starting second FTPS server on port 2124..."
-python3 "$CERT_DIR/ftps_server.py" 2124 /tmp/ftps2 "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" &
+python3 "$CERT_DIR/ftps_server.py" 2124 /tmp/ftps2 "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" 2>/dev/null &
 ftps2_pid=$!
 
 # Wait for servers to start
@@ -74,8 +89,6 @@ for i in {1..60}; do
     fi
     if [ $i -eq 60 ]; then
         echo "ERROR: FTPS servers did not start in time"
-        kill $ftps1_pid $ftps2_pid 2>/dev/null || true
-        rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR"
         exit 1
     fi
     sleep 0.5
@@ -91,9 +104,8 @@ echo "test3" > /tmp/ftps1/test3.txt
 echo "Creating config file with FTPS protocol..."
 echo '{"host_from":"localhost","port_from":2123,"login_from":"/tmp/ftps1","password_from":"/tmp/ftps1","path_from":"/","proto_from":"ftps","host_to":"localhost","port_to":2124,"login_to":"/tmp/ftps2","password_to":"/tmp/ftps2","path_to":"/","proto_to":"ftps","age":1,"filename_regexp":".*\\.txt"}' > /tmp/ftps_config.jsonl
 
-# Wait for files to age
-echo "Waiting 2 seconds for files to age..."
-sleep 2
+# Set file modification times to 10 seconds ago so they're immediately "old enough"
+touch -d '10 seconds ago' /tmp/ftps1/*.txt
 
 # Test without --insecure-skip-verify (should fail)
 echo ""
@@ -111,19 +123,16 @@ if ./target/debug/iftpfm2 --insecure-skip-verify /tmp/ftps_config.jsonl; then
     echo "SUCCESS: Transfer completed with --insecure-skip-verify"
 else
     echo "ERROR: Transfer failed even with --insecure-skip-verify"
-    kill $ftps1_pid $ftps2_pid 2>/dev/null || true
-    rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR"
-    rm -f /tmp/ftps_config.jsonl
     exit 1
 fi
 
 # Clear destination directory for next test
 rm -f /tmp/ftps2/*.txt
 
-# Test with --upload-verify (should verify file sizes)
+# Test with --size-check (should verify file sizes)
 echo ""
-echo "=== Test 3: With --upload-verify (should verify file sizes) ==="
-OUTPUT=$(./target/debug/iftpfm2 --insecure-skip-verify --upload-verify /tmp/ftps_config.jsonl 2>&1)
+echo "=== Test 3: With --size-check (should verify file sizes) ==="
+OUTPUT=$(./target/debug/iftpfm2 --insecure-skip-verify --size-check /tmp/ftps_config.jsonl 2>&1)
 if echo "$OUTPUT" | grep -q "Verifying upload of"; then
     echo "SUCCESS: Upload verification messages found"
     if echo "$OUTPUT" | grep -q "Upload verification passed"; then
@@ -138,9 +147,6 @@ fi
 # Check for verification warnings
 if echo "$OUTPUT" | grep -q "WARNING: Upload verification FAILED"; then
     echo "ERROR: Upload verification failed"
-    kill $ftps1_pid $ftps2_pid 2>/dev/null || true
-    rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR"
-    rm -f /tmp/ftps_config.jsonl
     exit 1
 fi
 
@@ -159,11 +165,10 @@ else
     ls -la /tmp/ftps2/
 fi
 
-# Cleanup
+# Cleanup (handled by trap, but keep explicit kill here for clarity)
 echo ""
 echo "Cleanup..."
 kill $ftps1_pid $ftps2_pid 2>/dev/null || true
-rm -rf /tmp/ftps1 /tmp/ftps2 "$CERT_DIR"
-rm -f /tmp/ftps_config.jsonl
+# Trap will handle full cleanup
 
 echo "FTPS test completed!"

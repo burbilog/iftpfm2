@@ -156,8 +156,8 @@ cargo doc --open
 - Applied via `connect_timeout()` methods for both FTP and FTPS
 - Error messages include the timeout value for debugging
 
-**Upload Verification:**
-- Configurable via `--upload-verify` CLI flag (default: disabled)
+**Size Check (Upload Verification):**
+- Configurable via `--size-check` CLI flag (default: disabled)
 - After upload, uses FTP `SIZE` command to verify file size on target server
 - Logs warning if size mismatch detected (non-breaking, continues with rename)
 - Requires server support for SIZE command (RFC 3659)

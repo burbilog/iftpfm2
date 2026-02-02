@@ -184,7 +184,7 @@ fn connect_server(
 /// * `thread_id` - Identifier for logging in parallel mode
 /// * `connect_timeout` - Connection timeout in seconds (None = 30s default)
 /// * `insecure_skip_verify` - Whether to skip TLS certificate verification for FTPS
-/// * `upload_verify` - Whether to verify uploaded file size using SIZE command
+/// * `size_check` - Whether to verify uploaded file size using SIZE command
 ///
 /// # Returns
 /// Number of files successfully transferred
@@ -202,7 +202,7 @@ fn connect_server(
 /// ```text
 /// // let count = transfer_files(&config, true, 1, None, false, false);
 /// ```
-pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>, insecure_skip_verify: bool, upload_verify: bool) -> i32 {
+pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>, insecure_skip_verify: bool, size_check: bool) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
         let _ = log_with_thread("Shutdown requested, skipping transfer", Some(thread_id));
@@ -429,7 +429,7 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                         }
 
                         // Verify upload using SIZE command if requested
-                        if upload_verify {
+                        if size_check {
                             let _ = log_with_thread(format!(
                                 "Verifying upload of '{}' (expected {} bytes)...",
                                 tmp_filename, file_size
@@ -463,6 +463,35 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
 
                         match rename_result {
                             Ok(_) => {
+                                // Verify final file after rename if requested
+                                if size_check {
+                                    let _ = log_with_thread(format!(
+                                        "Verifying final file '{}' (expected {} bytes)...",
+                                        filename, file_size
+                                    ), Some(thread_id));
+                                    match ftp_to.size(filename.as_str()) {
+                                        Ok(actual_size) => {
+                                            if actual_size == file_size {
+                                                let _ = log_with_thread(format!(
+                                                    "Final file verification passed: '{}' is {} bytes",
+                                                    filename, actual_size
+                                                ), Some(thread_id));
+                                            } else {
+                                                let _ = log_with_thread(format!(
+                                                    "WARNING: Final file verification FAILED: '{}' expected {} bytes, got {} bytes",
+                                                    filename, file_size, actual_size
+                                                ), Some(thread_id));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            let _ = log_with_thread(format!(
+                                                "WARNING: Final file verification error for '{}': {}",
+                                                filename, e
+                                            ), Some(thread_id));
+                                        }
+                                    }
+                                }
+
                                 let _ = log_with_thread(format!("Successful transfer of file {}", filename), Some(thread_id));
                                 successful_transfers += 1;
                                 // Delete source file only after successful transfer
@@ -486,6 +515,35 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
 
                                 match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
                                     Ok(_) => {
+                                        // Verify final file after rename if requested
+                                        if size_check {
+                                            let _ = log_with_thread(format!(
+                                                "Verifying final file '{}' (expected {} bytes)...",
+                                                filename, file_size
+                                            ), Some(thread_id));
+                                            match ftp_to.size(filename.as_str()) {
+                                                Ok(actual_size) => {
+                                                    if actual_size == file_size {
+                                                        let _ = log_with_thread(format!(
+                                                            "Final file verification passed: '{}' is {} bytes",
+                                                            filename, actual_size
+                                                        ), Some(thread_id));
+                                                    } else {
+                                                        let _ = log_with_thread(format!(
+                                                            "WARNING: Final file verification FAILED: '{}' expected {} bytes, got {} bytes",
+                                                            filename, file_size, actual_size
+                                                        ), Some(thread_id));
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    let _ = log_with_thread(format!(
+                                                        "WARNING: Final file verification error for '{}': {}",
+                                                        filename, e
+                                                    ), Some(thread_id));
+                                                }
+                                            }
+                                        }
+
                                         let _ = log_with_thread(format!("Successful transfer of file {}", filename), Some(thread_id));
                                         successful_transfers += 1;
                                         // Delete source file only after successful transfer
