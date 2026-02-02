@@ -1,7 +1,7 @@
 use crate::config::{Config, Protocol};
 use crate::logging::log_with_thread;
 use crate::shutdown::is_shutdown_requested;
-use suppaftp::{FtpStream, NativeTlsFtpStream, NativeTlsConnector, types::FileType};
+use suppaftp::{FtpStream, NativeTlsFtpStream, NativeTlsConnector, types::{FileType, Mode}};
 use regex::Regex;
 use std::io::Cursor;
 use std::net::ToSocketAddrs;
@@ -154,8 +154,12 @@ fn connect_server(
                 // Connect with explicit SSL/TLS from the start
                 match NativeTlsFtpStream::connect_timeout(addr, timeout) {
                     Ok(secure_stream) => {
-                        // Switch to secure mode
+                        // Switch to secure mode and use EPSV for data connections
                         secure_stream.into_secure(tls_connector, hostname)
+                            .and_then(|mut stream| {
+                                stream.set_mode(Mode::ExtendedPassive);
+                                Ok(stream)
+                            })
                             .map(FtpStreamWrapper::Ftps)
                     }
                     Err(e) => Err(e),
