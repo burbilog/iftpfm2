@@ -2,6 +2,23 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.2.1] - 2026-02-02
+
+### Fixed
+- **CWD error messages** now include login username and target path for easier debugging
+- All clippy warnings resolved (code quality improvements)
+- `never_loop` error in signal handler - replaced for-break with `if let Some()`
+- Added explicit `truncate(true)` when opening PID file
+- Replaced manual `impl Default` with `#[default]` derive for `Protocol` enum
+- Removed redundant closures in `ftp_ops.rs` (using function pointers)
+- Fixed documentation indentation in `logging.rs`
+
+### Changed
+- Refactored `parse_args()` to return `CliArgs` struct instead of 8-element tuple
+- Replaced `io::Error::new(Other, ...)` with `io::Error::other(...)`
+
+---
+
 ## [2.2.0] - 2026-01-30
 
 ### Added
@@ -140,6 +157,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.2.1** - Improved error messages, code quality improvements
 - **2.2.0** - FTPS protocol support, connection timeout, self-signed certificates
 - **2.1.1** - suppaftp migration, atomic operations, race condition fixes
 - **2.1.0** - JSONL config format, better extensibility
