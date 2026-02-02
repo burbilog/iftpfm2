@@ -399,10 +399,19 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
 
         match transfer_result {
             Ok(data) => {
+                let file_size = data.len();
+                let _ = log_with_thread(format!(
+                    "Uploading file {} ({} bytes)",
+                    filename, file_size
+                ), Some(thread_id));
                 // Upload the data to target server using put_file() with a reader
                 let mut reader = Cursor::new(data);
                 match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
-                    Ok(_) => {
+                    Ok(bytes_written) => {
+                        let _ = log_with_thread(format!(
+                            "Uploaded {} / {} bytes to TARGET FTP server",
+                            bytes_written, file_size
+                        ), Some(thread_id));
                         // Upload successful, now rename the temporary file
                         // Atomic rename: first try to rename directly
                         let rename_result = ftp_to.rename(tmp_filename.as_str(), filename.as_str());
@@ -460,8 +469,8 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                     }
                     Err(e) => {
                         let _ = log_with_thread(format!(
-                            "Error uploading file {} to TARGET FTP server: {}",
-                            filename, e
+                            "Error uploading file {} ({} bytes) to TARGET FTP server: {}",
+                            filename, file_size, e
                         ), Some(thread_id));
                         // Cleanup: try to remove the temporary file
                         let _ = ftp_to.rm(tmp_filename.as_str());
