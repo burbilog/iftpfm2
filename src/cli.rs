@@ -12,7 +12,6 @@ pub struct CliArgs {
     pub grace_seconds: u64,
     pub connect_timeout: Option<u64>,
     pub insecure_skip_verify: bool,
-    pub size_check: bool,
 }
 
 /// Prints usage instructions for the program.
@@ -20,7 +19,7 @@ pub struct CliArgs {
 /// Uses `PROGRAM_NAME` constant from `crate` for the executable name.
 pub fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] [-g grace_seconds] [-t connect_timeout] [--insecure-skip-verify] [--size-check] config_file",
+        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] [-g grace_seconds] [-t connect_timeout] [--insecure-skip-verify] config_file",
         crate::PROGRAM_NAME // Now using PROGRAM_NAME from lib.rs
     );
 }
@@ -48,7 +47,6 @@ pub fn parse_args() -> CliArgs {
     let mut grace_seconds = 30; // Default grace period
     let mut connect_timeout: Option<u64> = None; // Default 30 seconds will be applied in ftp_ops
     let mut insecure_skip_verify = false; // Default: verify certificates
-    let mut size_check = false; // Default: no size check
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -124,9 +122,6 @@ pub fn parse_args() -> CliArgs {
             "--insecure-skip-verify" => {
                 insecure_skip_verify = true;
             }
-            "--size-check" => {
-                size_check = true;
-            }
             _ => {
                 if config_file.is_none() {
                     config_file = Some(arg);
@@ -154,6 +149,5 @@ pub fn parse_args() -> CliArgs {
         grace_seconds,
         connect_timeout,
         insecure_skip_verify,
-        size_check,
     }
 }

@@ -156,16 +156,15 @@ cargo doc --open
 - Applied via `connect_timeout()` methods for both FTP and FTPS
 - Error messages include the timeout value for debugging
 
-**Size Check (Upload Verification):**
-- Configurable via `--size-check` CLI flag (default: disabled)
-- After upload, uses FTP `SIZE` command to verify file size on target server
-- Logs warning if size mismatch detected (non-breaking, continues with rename)
+**Upload Verification (Mandatory):**
+- ALWAYS uses FTP `SIZE` command to verify file size on target server after upload
+- Transfer FAILS if verification fails (no rename, no source deletion)
 - Requires server support for SIZE command (RFC 3659)
 - Log messages:
   - `Verifying upload of '{tmp_filename}' (expected {size} bytes)...`
   - `Upload verification passed: '{tmp_filename}' is {size} bytes`
-  - `WARNING: Upload verification FAILED: '{tmp_filename}' expected {X} bytes, got {Y} bytes`
-  - `WARNING: Upload verification error for '{tmp_filename}': {error}`
+  - `ERROR: Upload verification FAILED: '{tmp_filename}' expected {X} bytes, got {Y} bytes - transfer aborted`
+  - `ERROR: Upload verification error for '{tmp_filename}': {error} - transfer aborted`
 
 ## Common Issues to Avoid
 

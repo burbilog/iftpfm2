@@ -2,7 +2,7 @@
 #
 # iftpfm2 FTPS test script
 # Tests FTPS connections with self-signed certificates using --insecure-skip-verify
-# and upload verification using --size-check flag
+# Upload verification is always enabled (mandatory)
 # requires python3, pyftpdlib with TLS support, and openssl
 
 set -e
@@ -121,23 +121,10 @@ else
     echo "UNEXPECTED: Connection succeeded when it should have failed"
 fi
 
-# Test with --insecure-skip-verify (should succeed)
+# Test with --insecure-skip-verify (should succeed and verify uploads)
 echo ""
-echo "=== Test 2: With --insecure-skip-verify (should succeed) ==="
-if ./target/debug/iftpfm2 --insecure-skip-verify /tmp/ftps_config.jsonl; then
-    echo "SUCCESS: Transfer completed with --insecure-skip-verify"
-else
-    echo "ERROR: Transfer failed even with --insecure-skip-verify"
-    exit 1
-fi
-
-# Clear destination directory for next test
-rm -f /tmp/ftps2/*.txt
-
-# Test with --size-check (should verify file sizes)
-echo ""
-echo "=== Test 3: With --size-check (should verify file sizes) ==="
-OUTPUT=$(./target/debug/iftpfm2 --insecure-skip-verify --size-check /tmp/ftps_config.jsonl 2>&1)
+echo "=== Test 2: With --insecure-skip-verify (should succeed and verify uploads) ==="
+OUTPUT=$(./target/debug/iftpfm2 --insecure-skip-verify /tmp/ftps_config.jsonl 2>&1)
 if echo "$OUTPUT" | grep -q "Verifying upload of"; then
     echo "SUCCESS: Upload verification messages found"
     if echo "$OUTPUT" | grep -q "Upload verification passed"; then
@@ -149,8 +136,8 @@ else
     echo "WARNING: No upload verification messages found (SIZE command may not be supported)"
 fi
 
-# Check for verification warnings
-if echo "$OUTPUT" | grep -q "WARNING: Upload verification FAILED"; then
+# Check for verification errors
+if echo "$OUTPUT" | grep -q "ERROR: Upload verification FAILED"; then
     echo "ERROR: Upload verification failed"
     exit 1
 fi
