@@ -5,6 +5,11 @@
 
 set -e
 
+# Add cargo to PATH if not already there
+if ! command -v cargo &>/dev/null && [ -d "$HOME/.cargo/bin" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 # Cleanup trap - ensure servers are killed on exit
 cleanup() {
     if [ -n "$ftp1_pid" ]; then kill $ftp1_pid 2>/dev/null || true; fi

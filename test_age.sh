@@ -5,6 +5,11 @@
 
 set -e
 
+# Add cargo to PATH if not already there
+if ! command -v cargo &>/dev/null && [ -d "$HOME/.cargo/bin" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 # Function to cleanup processes on exit (successful or not)
 cleanup() {
     echo "Stopping FTP servers..."
