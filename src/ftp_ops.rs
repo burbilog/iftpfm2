@@ -237,8 +237,8 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
     }
     if let Err(e) = ftp_from.cwd(config.path_from.as_str()) {
         let _ = log_with_thread(format!(
-            "Error changing directory on SOURCE FTP server {}: {}",
-            config.ip_address_from, e
+            "Error changing directory on SOURCE FTP server {} (user '{}', path '{}'): {}",
+            config.ip_address_from, config.login_from, config.path_from, e
         ), Some(thread_id));
         let _ = ftp_from.quit();
         return 0;
@@ -274,8 +274,8 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
     }
     if let Err(e) = ftp_to.cwd(config.path_to.as_str()) {
         let _ = log_with_thread(format!(
-            "Error changing directory on TARGET FTP server {}: {}",
-            config.ip_address_to, e
+            "Error changing directory on TARGET FTP server {} (user '{}', path '{}'): {}",
+            config.ip_address_to, config.login_to, config.path_to, e
         ), Some(thread_id));
         let _ = ftp_to.quit();
         let _ = ftp_from.quit();
