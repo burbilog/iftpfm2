@@ -409,9 +409,16 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                 match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
                     Ok(bytes_written) => {
                         let _ = log_with_thread(format!(
-                            "Uploaded {} / {} bytes to TARGET FTP server",
-                            bytes_written, file_size
+                            "Uploaded {} / {} bytes to TARGET as '{}', renaming to '{}'",
+                            bytes_written, file_size, tmp_filename, filename
                         ), Some(thread_id));
+                        // Sanity check: verify bytes_written matches expected size
+                        if bytes_written != file_size as u64 {
+                            let _ = log_with_thread(format!(
+                                "WARNING: Size mismatch! Expected {} bytes, but put_file() reported {} bytes written",
+                                file_size, bytes_written
+                            ), Some(thread_id));
+                        }
                         // Upload successful, now rename the temporary file
                         // Atomic rename: first try to rename directly
                         let rename_result = ftp_to.rename(tmp_filename.as_str(), filename.as_str());
