@@ -417,8 +417,8 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                 match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
                     Ok(bytes_written) => {
                         let _ = log_with_thread(format!(
-                            "Uploaded {} / {} bytes to TARGET as '{}', renaming to '{}'",
-                            bytes_written, file_size, tmp_filename, filename
+                            "Uploaded {} / {} bytes to TARGET as '{}'",
+                            bytes_written, file_size, tmp_filename
                         ), Some(thread_id));
                         // Sanity check: verify bytes_written matches expected size
                         if bytes_written != file_size as u64 {
