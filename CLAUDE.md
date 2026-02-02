@@ -105,6 +105,7 @@ cargo doc --open
    - Check file age
    - Delete from target if exists
    - Transfer via `retr()` + `put_file()` to temporary file
+   - Verify upload size (if `--upload-verify` flag is set)
    - Rename temporary file to final name
    - Delete from source if `-d` flag
 8. Call `quit()` on both connections
@@ -154,6 +155,17 @@ cargo doc --open
 - Passed to `connect_server()` as `Duration`
 - Applied via `connect_timeout()` methods for both FTP and FTPS
 - Error messages include the timeout value for debugging
+
+**Upload Verification:**
+- Configurable via `--upload-verify` CLI flag (default: disabled)
+- After upload, uses FTP `SIZE` command to verify file size on target server
+- Logs warning if size mismatch detected (non-breaking, continues with rename)
+- Requires server support for SIZE command (RFC 3659)
+- Log messages:
+  - `Verifying upload of '{tmp_filename}' (expected {size} bytes)...`
+  - `Upload verification passed: '{tmp_filename}' is {size} bytes`
+  - `WARNING: Upload verification FAILED: '{tmp_filename}' expected {X} bytes, got {Y} bytes`
+  - `WARNING: Upload verification error for '{tmp_filename}': {error}`
 
 ## Common Issues to Avoid
 

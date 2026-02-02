@@ -80,6 +80,13 @@ impl FtpStreamWrapper {
         }
     }
 
+    fn size(&mut self, pathname: &str) -> Result<usize, suppaftp::FtpError> {
+        match self {
+            FtpStreamWrapper::Ftp(s) => s.size(pathname),
+            FtpStreamWrapper::Ftps(s) => s.size(pathname),
+        }
+    }
+
     fn quit(&mut self) -> Result<(), suppaftp::FtpError> {
         match self {
             FtpStreamWrapper::Ftp(s) => s.quit(),
@@ -177,6 +184,7 @@ fn connect_server(
 /// * `thread_id` - Identifier for logging in parallel mode
 /// * `connect_timeout` - Connection timeout in seconds (None = 30s default)
 /// * `insecure_skip_verify` - Whether to skip TLS certificate verification for FTPS
+/// * `upload_verify` - Whether to verify uploaded file size using SIZE command
 ///
 /// # Returns
 /// Number of files successfully transferred
@@ -192,9 +200,9 @@ fn connect_server(
 ///
 /// # Example
 /// ```text
-/// // let count = transfer_files(&config, true, 1, None, false);
+/// // let count = transfer_files(&config, true, 1, None, false, false);
 /// ```
-pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>, insecure_skip_verify: bool) -> i32 {
+pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_timeout: Option<u64>, insecure_skip_verify: bool, upload_verify: bool) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
         let _ = log_with_thread("Shutdown requested, skipping transfer", Some(thread_id));
@@ -419,6 +427,36 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                                 file_size, bytes_written
                             ), Some(thread_id));
                         }
+
+                        // Verify upload using SIZE command if requested
+                        if upload_verify {
+                            let _ = log_with_thread(format!(
+                                "Verifying upload of '{}' (expected {} bytes)...",
+                                tmp_filename, file_size
+                            ), Some(thread_id));
+                            match ftp_to.size(tmp_filename.as_str()) {
+                                Ok(actual_size) => {
+                                    if actual_size == file_size {
+                                        let _ = log_with_thread(format!(
+                                            "Upload verification passed: '{}' is {} bytes",
+                                            tmp_filename, actual_size
+                                        ), Some(thread_id));
+                                    } else {
+                                        let _ = log_with_thread(format!(
+                                            "WARNING: Upload verification FAILED: '{}' expected {} bytes, got {} bytes",
+                                            tmp_filename, file_size, actual_size
+                                        ), Some(thread_id));
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = log_with_thread(format!(
+                                        "WARNING: Upload verification error for '{}': {}",
+                                        tmp_filename, e
+                                    ), Some(thread_id));
+                                }
+                            }
+                        }
+
                         // Upload successful, now rename the temporary file
                         // Atomic rename: first try to rename directly
                         let rename_result = ftp_to.rename(tmp_filename.as_str(), filename.as_str());
@@ -533,7 +571,7 @@ mod tests {
             filename_regexp: ".*".to_string(),
         };
 
-        let result = transfer_files(&config, false, 1, None, false);
+        let result = transfer_files(&config, false, 1, None, false, false);
         assert_eq!(result, 0, "Should return 0 when shutdown requested before start");
 
         // Reset shutdown flag for other tests
