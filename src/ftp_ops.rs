@@ -2,18 +2,67 @@ use crate::config::{Config, Protocol};
 use crate::logging::log_with_thread;
 use crate::shutdown::is_shutdown_requested;
 use regex::Regex;
+use rustls::ClientConfig;
 use std::io::Cursor;
 use std::net::ToSocketAddrs;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use suppaftp::{
     types::{FileType, Mode},
-    FtpStream, NativeTlsConnector, NativeTlsFtpStream, Status,
+    FtpStream, RustlsConnector, RustlsFtpStream, Status,
 };
+
+// Module for insecure certificate verification
+mod danger {
+    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+    use rustls::DigitallySignedStruct;
+
+    #[derive(Debug)]
+    pub struct NoCertificateVerification;
+
+    impl ServerCertVerifier for NoCertificateVerification {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            rustls::crypto::ring::default_provider()
+                .signature_verification_algorithms
+                .supported_schemes()
+        }
+    }
+}
 
 /// Enum wrapper for either FTP or FTPS stream
 enum FtpStreamWrapper {
     Ftp(FtpStream),
-    Ftps(NativeTlsFtpStream),
+    Ftps(RustlsFtpStream),
 }
 
 impl FtpStreamWrapper {
@@ -108,8 +157,8 @@ impl From<FtpStream> for FtpStreamWrapper {
     }
 }
 
-impl From<NativeTlsFtpStream> for FtpStreamWrapper {
-    fn from(stream: NativeTlsFtpStream) -> Self {
+impl From<RustlsFtpStream> for FtpStreamWrapper {
+    fn from(stream: RustlsFtpStream) -> Self {
         FtpStreamWrapper::Ftps(stream)
     }
 }
@@ -140,27 +189,48 @@ fn connect_server(
             Protocol::Ftp => FtpStream::connect_timeout(addr, timeout).map(FtpStreamWrapper::Ftp),
             Protocol::Ftps => {
                 // For FTPS, we need to establish TLS connection
-                // First connect to the port
-                let tls_connector = if insecure_skip_verify {
-                    NativeTlsConnector::from(
-                        suppaftp::native_tls::TlsConnector::builder()
-                            .danger_accept_invalid_certs(true)
-                            .build()
-                            .map_err(|e| {
-                                suppaftp::FtpError::ConnectionError(std::io::Error::other(e))
-                            })?,
-                    )
+                // Initialize Rustls configuration
+                let provider = rustls::crypto::ring::default_provider();
+                let builder = ClientConfig::builder_with_provider(Arc::new(provider));
+
+                let config = if insecure_skip_verify {
+                    builder
+                        .with_safe_default_protocol_versions()
+                        .map_err(|e| suppaftp::FtpError::SecureError(e.to_string()))?
+                        .dangerous()
+                        .with_custom_certificate_verifier(Arc::new(
+                            danger::NoCertificateVerification,
+                        ))
+                        .with_no_client_auth()
                 } else {
-                    NativeTlsConnector::from(suppaftp::native_tls::TlsConnector::new().map_err(
-                        |e| suppaftp::FtpError::ConnectionError(std::io::Error::other(e)),
-                    )?)
+                    let mut root_store = rustls::RootCertStore::empty();
+                    let certs_result = rustls_native_certs::load_native_certs();
+                    for cert in certs_result.certs {
+                        root_store.add(cert).ok();
+                    }
+                    if !certs_result.errors.is_empty() {
+                        let _ = log_with_thread(
+                            format!(
+                                "Warning: failed to load some native certificates: {:?}",
+                                certs_result.errors
+                            ),
+                            None,
+                        );
+                    }
+                    builder
+                        .with_safe_default_protocol_versions()
+                        .map_err(|e| suppaftp::FtpError::SecureError(e.to_string()))?
+                        .with_root_certificates(root_store)
+                        .with_no_client_auth()
                 };
 
+                let tls_connector = RustlsConnector::from(Arc::new(config));
+
                 // Connect with explicit SSL/TLS from the start
-                match NativeTlsFtpStream::connect_timeout(addr, timeout) {
+                // Note: RustlsFtpStream::connect_timeout uses TcpStream::connect_timeout then wraps it
+                match suppaftp::RustlsFtpStream::connect_timeout(addr, timeout) {
                     Ok(secure_stream) => {
                         // Switch to secure mode and use PASV for FTPS
-                        // (EPSV doesn't work with some FTPS servers)
                         secure_stream
                             .into_secure(tls_connector, hostname)
                             .and_then(|mut stream| {
