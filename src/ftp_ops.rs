@@ -469,8 +469,8 @@ pub fn transfer_files(config: &Config, delete: bool, thread_id: usize, connect_t
                     }
                     Err(e) => {
                         let _ = log_with_thread(format!(
-                            "Error uploading file {} ({} bytes) to TARGET {}://{} server (user '{}'): {}",
-                            filename, file_size, config.proto_to, config.ip_address_to, config.login_to, e
+                            "Error uploading file {} ({} bytes) to TARGET {}://{} (path '{}', user '{}'): {}",
+                            filename, file_size, config.proto_to, config.ip_address_to, config.path_to, config.login_to, e
                         ), Some(thread_id));
                         // Cleanup: try to remove the temporary file
                         let _ = ftp_to.rm(tmp_filename.as_str());
