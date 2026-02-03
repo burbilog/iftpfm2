@@ -6,10 +6,12 @@
 
 pub mod ftp;
 pub mod ftps;
+pub mod sftp;
 
 // Re-export protocol clients for convenience
 pub use ftp::FtpClient;
 pub use ftps::FtpsClient;
+pub use sftp::SftpClient;
 
 use crate::config::Protocol;
 use std::io::Read;
@@ -37,11 +39,17 @@ pub trait FileTransferClient {
     /// * `port` - Server port number
     /// * `timeout` - Connection timeout
     /// * `config` - Protocol-specific configuration
+    /// * `user` - Username for authentication (for SFTP)
+    /// * `password` - Optional password for authentication
+    /// * `keyfile_path` - Optional path to SSH private key (for SFTP)
     fn connect(
         host: &str,
         port: u16,
         timeout: Duration,
         config: &ProtocolConfig,
+        user: &str,
+        password: Option<&str>,
+        keyfile_path: Option<&str>,
     ) -> Result<Self, FtpError>
     where
         Self: Sized;
@@ -107,14 +115,15 @@ impl From<TransferMode> for suppaftp::types::FileType {
     }
 }
 
-/// Enum wrapper for FTP/FTPS clients
+/// Enum wrapper for FTP/FTPS/SFTP clients
 ///
 /// Since `FileTransferClient` has generic methods, it cannot be used as
 /// `dyn FileTransferClient`. This enum provides a concrete type that can
-/// be used to hold either FTP or FTPS clients.
+/// be used to hold FTP, FTPS, or SFTP clients.
 pub enum Client {
     Ftp(FtpClient),
     Ftps(FtpsClient),
+    Sftp(SftpClient),
 }
 
 impl Client {
@@ -125,14 +134,18 @@ impl Client {
         port: u16,
         timeout: Duration,
         insecure_skip_verify: bool,
+        user: &str,
+        password: Option<&str>,
+        keyfile_path: Option<&str>,
     ) -> Result<Self, FtpError> {
         let config = ProtocolConfig {
             insecure_skip_verify,
         };
 
         match proto {
-            Protocol::Ftp => Ok(Client::Ftp(FtpClient::connect(host, port, timeout, &config)?)),
-            Protocol::Ftps => Ok(Client::Ftps(FtpsClient::connect(host, port, timeout, &config)?)),
+            Protocol::Ftp => Ok(Client::Ftp(FtpClient::connect(host, port, timeout, &config, user, password, keyfile_path)?)),
+            Protocol::Ftps => Ok(Client::Ftps(FtpsClient::connect(host, port, timeout, &config, user, password, keyfile_path)?)),
+            Protocol::Sftp => Ok(Client::Sftp(SftpClient::connect(host, port, timeout, &config, user, password, keyfile_path)?)),
         }
     }
 
@@ -141,6 +154,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.login(user, password),
             Client::Ftps(client) => client.login(user, password),
+            Client::Sftp(client) => client.login(user, password),
         }
     }
 
@@ -149,6 +163,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.cwd(path),
             Client::Ftps(client) => client.cwd(path),
+            Client::Sftp(client) => client.cwd(path),
         }
     }
 
@@ -157,6 +172,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.transfer_type(mode),
             Client::Ftps(client) => client.transfer_type(mode),
+            Client::Sftp(client) => client.transfer_type(mode),
         }
     }
 
@@ -165,6 +181,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.nlst(path),
             Client::Ftps(client) => client.nlst(path),
+            Client::Sftp(client) => client.nlst(path),
         }
     }
 
@@ -173,6 +190,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.mdtm(filename),
             Client::Ftps(client) => client.mdtm(filename),
+            Client::Sftp(client) => client.mdtm(filename),
         }
     }
 
@@ -181,6 +199,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.size(filename),
             Client::Ftps(client) => client.size(filename),
+            Client::Sftp(client) => client.size(filename),
         }
     }
 
@@ -192,6 +211,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.retr(filename, callback),
             Client::Ftps(client) => client.retr(filename, callback),
+            Client::Sftp(client) => client.retr(filename, callback),
         }
     }
 
@@ -204,6 +224,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.put_file(filename, reader),
             Client::Ftps(client) => client.put_file(filename, reader),
+            Client::Sftp(client) => client.put_file(filename, reader),
         }
     }
 
@@ -212,6 +233,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.rename(from, to),
             Client::Ftps(client) => client.rename(from, to),
+            Client::Sftp(client) => client.rename(from, to),
         }
     }
 
@@ -220,6 +242,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.rm(filename),
             Client::Ftps(client) => client.rm(filename),
+            Client::Sftp(client) => client.rm(filename),
         }
     }
 
@@ -228,6 +251,7 @@ impl Client {
         match self {
             Client::Ftp(client) => client.quit(),
             Client::Ftps(client) => client.quit(),
+            Client::Sftp(client) => client.quit(),
         }
     }
 }

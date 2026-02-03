@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::fmt;
 use zeroize::Zeroize;
 
-/// FTP/FTPS protocol type
+/// FTP/FTPS/SFTP protocol type
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
@@ -14,6 +14,8 @@ pub enum Protocol {
     Ftp,
     /// FTP over TLS/SSL (encrypted)
     Ftps,
+    /// SSH File Transfer Protocol
+    Sftp,
 }
 
 impl fmt::Display for Protocol {
@@ -21,6 +23,7 @@ impl fmt::Display for Protocol {
         match self {
             Protocol::Ftp => write!(f, "ftp"),
             Protocol::Ftps => write!(f, "ftps"),
+            Protocol::Sftp => write!(f, "sftp"),
         }
     }
 }
@@ -38,12 +41,15 @@ pub struct Config {
     #[serde(rename = "login_from")]
     pub login_from: String,
     /// Password for source FTP server (JSON field: password_from)
-    #[serde(rename = "password_from")]
-    pub password_from: String,
+    #[serde(rename = "password_from", default)]
+    pub password_from: Option<String>,
+    /// Path to private SSH key for SFTP source auth (JSON field: keyfile_from)
+    #[serde(rename = "keyfile_from", default)]
+    pub keyfile_from: Option<String>,
     /// Source directory path (must be literal path, no wildcards) (JSON field: path_from)
     #[serde(rename = "path_from")]
     pub path_from: String,
-    /// Source protocol (ftp or ftps, default: ftp) (JSON field: proto_from)
+    /// Source protocol (ftp, ftps, or sftp, default: ftp) (JSON field: proto_from)
     #[serde(rename = "proto_from", default)]
     pub proto_from: Protocol,
     /// Destination FTP server IP/hostname (JSON field: host_to)
@@ -56,12 +62,15 @@ pub struct Config {
     #[serde(rename = "login_to")]
     pub login_to: String,
     /// Password for destination FTP server (JSON field: password_to)
-    #[serde(rename = "password_to")]
-    pub password_to: String,
+    #[serde(rename = "password_to", default)]
+    pub password_to: Option<String>,
+    /// Path to private SSH key for SFTP destination auth (JSON field: keyfile_to)
+    #[serde(rename = "keyfile_to", default)]
+    pub keyfile_to: Option<String>,
     /// Destination directory path (JSON field: path_to)
     #[serde(rename = "path_to")]
     pub path_to: String,
-    /// Destination protocol (ftp or ftps, default: ftp) (JSON field: proto_to)
+    /// Destination protocol (ftp, ftps, or sftp, default: ftp) (JSON field: proto_to)
     #[serde(rename = "proto_to", default)]
     pub proto_to: Protocol,
     /// Minimum file age to transfer (seconds) (JSON field: age)
@@ -75,8 +84,12 @@ pub struct Config {
 impl Drop for Config {
     fn drop(&mut self) {
         // Zeroize passwords when Config is dropped to protect sensitive data in memory
-        self.password_from.zeroize();
-        self.password_to.zeroize();
+        if let Some(ref mut p) = self.password_from {
+            p.zeroize();
+        }
+        if let Some(ref mut p) = self.password_to {
+            p.zeroize();
+        }
     }
 }
 
@@ -92,7 +105,8 @@ impl Config {
     /// - Host addresses must not contain invalid characters (spaces, slashes)
     /// - Ports must be non-zero
     /// - Logins must be non-empty
-    /// - Passwords must be non-empty
+    /// - For FTP/FTPS: password is required
+    /// - For SFTP: password OR keyfile is required (but not both)
     /// - Paths must be non-empty
     /// - Age must be reasonable (> 0)
     /// - Regex pattern must be valid
@@ -153,18 +167,79 @@ impl Config {
             ));
         }
 
-        // Validate passwords
-        if self.password_from.is_empty() {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "password_from cannot be empty"
-            ));
+        // Validate authentication (password or keyfile, but not both)
+        use std::path::Path;
+
+        // Validate from authentication
+        let has_password_from = self.password_from.as_ref().map_or(false, |p| !p.is_empty());
+        let has_keyfile_from = self.keyfile_from.as_ref().map_or(false, |k| !k.is_empty());
+
+        if self.proto_from == Protocol::Sftp {
+            if !has_password_from && !has_keyfile_from {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "from_auth: password_from or keyfile_from is required for SFTP"
+                ));
+            }
+            if has_password_from && has_keyfile_from {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "from_auth: password_from and keyfile_from are mutually exclusive"
+                ));
+            }
+            if has_keyfile_from {
+                let keyfile = self.keyfile_from.as_ref().unwrap();
+                if !Path::new(keyfile).exists() {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("from_auth: keyfile_from '{}' does not exist", keyfile)
+                    ));
+                }
+            }
+        } else {
+            // For FTP/FTPS, password is required
+            if !has_password_from {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "password_from is required for FTP/FTPS"
+                ));
+            }
         }
-        if self.password_to.is_empty() {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "password_to cannot be empty"
-            ));
+
+        // Validate to authentication
+        let has_password_to = self.password_to.as_ref().map_or(false, |p| !p.is_empty());
+        let has_keyfile_to = self.keyfile_to.as_ref().map_or(false, |k| !k.is_empty());
+
+        if self.proto_to == Protocol::Sftp {
+            if !has_password_to && !has_keyfile_to {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "to_auth: password_to or keyfile_to is required for SFTP"
+                ));
+            }
+            if has_password_to && has_keyfile_to {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "to_auth: password_to and keyfile_to are mutually exclusive"
+                ));
+            }
+            if has_keyfile_to {
+                let keyfile = self.keyfile_to.as_ref().unwrap();
+                if !Path::new(keyfile).exists() {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("to_auth: keyfile_to '{}' does not exist", keyfile)
+                    ));
+                }
+            }
+        } else {
+            // For FTP/FTPS, password is required
+            if !has_password_to {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "password_to is required for FTP/FTPS"
+                ));
+            }
         }
 
         // Validate paths
@@ -285,13 +360,15 @@ mod tests {
                 ip_address_from: "192.168.0.1".to_string(),
                 port_from: 22,
                 login_from: "user1".to_string(),
-                password_from: "password1".to_string(),
+                password_from: Some("password1".to_string()),
+                keyfile_from: None,
                 path_from: "/path/to/files/".to_string(),
                 proto_from: Protocol::Ftp,
                 ip_address_to: "192.168.0.2".to_string(),
                 port_to: 22,
                 login_to: "user2".to_string(),
-                password_to: "password2".to_string(),
+                password_to: Some("password2".to_string()),
+                keyfile_to: None,
                 path_to: "/path/to/files2".to_string(),
                 proto_to: Protocol::Ftp,
                 age: 30,
@@ -301,13 +378,15 @@ mod tests {
                 ip_address_from: "192.168.0.3".to_string(),
                 port_from: 22,
                 login_from: "user3".to_string(),
-                password_from: "password3".to_string(),
+                password_from: Some("password3".to_string()),
+                keyfile_from: None,
                 path_from: "/path/to/files3/".to_string(),
                 proto_from: Protocol::Ftp,
                 ip_address_to: "192.168.0.4".to_string(),
                 port_to: 22,
                 login_to: "user4".to_string(),
-                password_to: "password4".to_string(),
+                password_to: Some("password4".to_string()),
+                keyfile_to: None,
                 path_to: "/path/to/files4".to_string(),
                 proto_to: Protocol::Ftp,
                 age: 60,
@@ -367,13 +446,15 @@ mod tests {
             ip_address_from: "".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -388,13 +469,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 0,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -409,13 +492,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -430,13 +515,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "".to_string(),
+            password_from: Some("".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -451,13 +538,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -472,13 +561,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 0,
@@ -493,13 +584,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -514,13 +607,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -535,13 +630,15 @@ mod tests {
             ip_address_from: "192.168.1.1/invalid".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -556,13 +653,15 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168\\1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -577,13 +676,130 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: "pass".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2 invalid".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: "pass2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_sftp_no_auth() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 22,
+            login_from: "user".to_string(),
+            password_from: None,
+            keyfile_from: None,
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Sftp,
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_sftp_both_auth_methods() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 22,
+            login_from: "user".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: Some("/path/to/key".to_string()),
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Sftp,
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_sftp_nonexistent_keyfile() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 22,
+            login_from: "user".to_string(),
+            password_from: None,
+            keyfile_from: Some("/nonexistent/keyfile".to_string()),
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Sftp,
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validate_sftp_password_auth_valid() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 22,
+            login_from: "user".to_string(),
+            password_from: Some("pass".to_string()),
+            keyfile_from: None,
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Sftp,
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_validate_ftp_requires_password() {
+        let config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: None,
+            keyfile_from: None,
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: Some("pass2".to_string()),
+            keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,

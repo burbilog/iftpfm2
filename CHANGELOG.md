@@ -2,6 +2,25 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.0] - 2026-02-03
+
+### Added
+- **SFTP protocol support** - new `sftp` option for `proto_from` and `proto_to` config fields
+- Password and SSH key authentication for SFTP connections
+- `test_sftp_docker.sh` integration test for SFTP with Docker (atmoz/sftp container)
+- `make test-sftp` target for running SFTP tests (separate from main test suite)
+
+### Fixed
+- **SFTP working directory tracking** - SFTP client now properly tracks current directory for file operations
+  - Added `current_dir` field to `SftpClient` to handle SFTP's lack of true CWD concept
+  - Updated `nlst()`, `mdtm()`, `size()`, `retr()`, `put_file()`, `rename()`, and `rm()` to use full paths
+
+### Changed
+- SFTP implementation uses `ssh2` crate for SSH file transfer operations
+- SFTP paths are now properly resolved relative to the current working directory
+
+---
+
 ## [2.3.0] - 2026-02-03
 
 ### Added
@@ -171,6 +190,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.4.0** - SFTP protocol support, working directory tracking
 - **2.3.0** - Separate protocol modules, logging fixes, code deduplication
 - **2.2.1** - Improved error messages, code quality improvements
 - **2.2.0** - FTPS protocol support, connection timeout, self-signed certificates

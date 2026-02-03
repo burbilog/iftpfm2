@@ -109,6 +109,9 @@ pub fn transfer_files(
         config.port_from,
         timeout,
         insecure_skip_verify,
+        &config.login_from,
+        config.password_from.as_deref(),
+        config.keyfile_from.as_deref(),
     ) {
         Ok(stream) => stream,
         Err(e) => {
@@ -126,7 +129,10 @@ pub fn transfer_files(
         }
     };
 
-    if let Err(e) = ftp_from.login(config.login_from.as_str(), config.password_from.as_str()) {
+    if let Err(e) = ftp_from.login(
+        config.login_from.as_str(),
+        config.password_from.as_deref().unwrap_or(""),
+    ) {
         let _ = log_with_thread(
             format!(
                 "Error logging into SOURCE FTP server {}: {}",
@@ -156,6 +162,9 @@ pub fn transfer_files(
         config.port_to,
         timeout,
         insecure_skip_verify,
+        &config.login_to,
+        config.password_to.as_deref(),
+        config.keyfile_to.as_deref(),
     ) {
         Ok(stream) => stream,
         Err(e) => {
@@ -174,7 +183,10 @@ pub fn transfer_files(
         }
     };
 
-    if let Err(e) = ftp_to.login(config.login_to.as_str(), config.password_to.as_str()) {
+    if let Err(e) = ftp_to.login(
+        config.login_to.as_str(),
+        config.password_to.as_deref().unwrap_or(""),
+    ) {
         let _ = log_with_thread(
             format!(
                 "Error logging into TARGET FTP server {}: {}",
@@ -597,13 +609,15 @@ mod tests {
             ip_address_from: "127.0.0.1".to_string(),
             port_from: 21,
             login_from: "test".to_string(),
-            password_from: "test".to_string(),
+            password_from: Some("test".to_string()),
+            keyfile_from: None,
             path_from: "/test/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
             port_to: 21,
             login_to: "test".to_string(),
-            password_to: "test".to_string(),
+            password_to: Some("test".to_string()),
+            keyfile_to: None,
             path_to: "/test/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -628,13 +642,15 @@ mod tests {
             ip_address_from: "127.0.0.1".to_string(),
             port_from: 21,
             login_from: "test".to_string(),
-            password_from: "test".to_string(),
+            password_from: Some("test".to_string()),
+            keyfile_from: None,
             path_from: "/test/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
             port_to: 21,
             login_to: "test".to_string(),
-            password_to: "test".to_string(),
+            password_to: Some("test".to_string()),
+            keyfile_to: None,
             path_to: "/test/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,

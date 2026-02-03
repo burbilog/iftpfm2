@@ -1,6 +1,6 @@
 
 all:
-	@echo usage: make debug or make release or make install or make test or make cloc
+	@echo usage: make debug or make release or make install or make test or make test-sftp or make cloc
 
 # install into ~/.cargo/bin
 install: release
@@ -22,6 +22,11 @@ test:
 	./test_age.sh
 	./test_conn_timeout.sh
 	./test_ftps.sh
+
+# run SFTP tests with Docker (separate target, not included in main test target)
+test-sftp:
+	cargo build
+	./test_sftp_docker.sh
 
 # generate and install rust documentation (always rebuilds)
 .PHONY: doc

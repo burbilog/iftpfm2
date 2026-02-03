@@ -21,6 +21,9 @@ impl FileTransferClient for FtpClient {
         port: u16,
         timeout: Duration,
         _config: &ProtocolConfig,
+        _user: &str,
+        _password: Option<&str>,
+        _keyfile_path: Option<&str>,
     ) -> Result<Self, FtpError>
     where
         Self: Sized,
