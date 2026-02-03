@@ -6,6 +6,7 @@ use std::process;
 pub struct CliArgs {
     pub delete: bool,
     pub log_file: Option<String>,
+    pub stdout: bool,
     pub config_file: Option<String>,
     pub parallel: usize,
     pub randomize: bool,
@@ -19,8 +20,24 @@ pub struct CliArgs {
 /// Uses `PROGRAM_NAME` constant from `crate` for the executable name.
 pub fn print_usage() {
     println!(
-        "Usage: {} [-h] [-v] [-d] [-r] [-l logfile] [-p parallel] [-g grace_seconds] [-t connect_timeout] [--insecure-skip-verify] config_file",
-        crate::PROGRAM_NAME // Now using PROGRAM_NAME from lib.rs
+        "Usage: {} [OPTIONS] config_file
+
+Options:
+  -h                 Show this help message and exit
+  -v                 Show version information
+  -d                 Delete source files after successful transfer
+  -r                 Randomize file transfer order
+  -l <logfile>       Write logs to the specified file (mutually exclusive with -s)
+  -s                 Write logs to stdout (mutually exclusive with -l)
+  -p <parallel>      Number of parallel transfers (default: 1)
+  -g <seconds>       Grace period in seconds before SIGKILL (default: 30)
+  -t <seconds>       Connection timeout in seconds (default: 30)
+  --insecure-skip-verify
+                     Skip TLS certificate verification for FTPS (DANGEROUS)
+
+Arguments:
+  config_file        Path to JSONL configuration file",
+        crate::PROGRAM_NAME
     );
 }
 
@@ -41,6 +58,7 @@ pub fn print_usage() {
 pub fn parse_args() -> CliArgs {
     let mut log_file = None;
     let mut delete = false;
+    let mut stdout = false;
     let mut config_file = None;
     let mut parallel = 1;
     let mut randomize = false;
@@ -62,6 +80,7 @@ pub fn parse_args() -> CliArgs {
                 process::exit(0);
             }
             "-d" => delete = true,
+            "-s" => stdout = true,
             "-l" => log_file = Some(args.next().unwrap_or_else(|| {
                 eprintln!("Error: Missing log file argument");
                 print_usage();
@@ -140,9 +159,17 @@ pub fn parse_args() -> CliArgs {
         process::exit(1);
     }
 
+    // Check mutual exclusivity of -s and -l flags
+    if stdout && log_file.is_some() {
+        eprintln!("Error: -s and -l flags are mutually exclusive");
+        print_usage();
+        process::exit(1);
+    }
+
     CliArgs {
         delete,
         log_file,
+        stdout,
         config_file,
         parallel,
         randomize,

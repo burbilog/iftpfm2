@@ -37,7 +37,8 @@ use std::process; // For process::exit
 fn main() {
     // Parse arguments first to setup logging
     // These functions are now part of the library, accessed via the use statement.
-    let cli::CliArgs { delete, log_file: log_file_option, config_file: config_file_option,
+    let cli::CliArgs { delete, log_file: log_file_option, stdout: _,
+                       config_file: config_file_option,
                        parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify } =
         parse_args(); // from iftpfm2::cli
 
