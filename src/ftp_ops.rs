@@ -1,265 +1,10 @@
-use crate::config::{Config, Protocol};
+use crate::config::Config;
 use crate::logging::log_with_thread;
+use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
 use regex::Regex;
-use rustls::ClientConfig;
 use std::io::Cursor;
-use std::net::ToSocketAddrs;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use suppaftp::{
-    types::{FileType, Mode},
-    FtpStream, RustlsConnector, RustlsFtpStream, Status,
-};
-
-// Module for insecure certificate verification
-mod danger {
-    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-    use rustls::DigitallySignedStruct;
-
-    #[derive(Debug)]
-    pub struct NoCertificateVerification;
-
-    impl ServerCertVerifier for NoCertificateVerification {
-        fn verify_server_cert(
-            &self,
-            _end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
-            _now: UnixTime,
-        ) -> Result<ServerCertVerified, rustls::Error> {
-            Ok(ServerCertVerified::assertion())
-        }
-
-        fn verify_tls12_signature(
-            &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            Ok(HandshakeSignatureValid::assertion())
-        }
-
-        fn verify_tls13_signature(
-            &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            Ok(HandshakeSignatureValid::assertion())
-        }
-
-        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            rustls::crypto::ring::default_provider()
-                .signature_verification_algorithms
-                .supported_schemes()
-        }
-    }
-}
-
-/// Enum wrapper for either FTP or FTPS stream
-enum FtpStreamWrapper {
-    Ftp(FtpStream),
-    Ftps(RustlsFtpStream),
-}
-
-impl FtpStreamWrapper {
-    fn login(&mut self, user: &str, password: &str) -> Result<(), suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.login(user, password),
-            FtpStreamWrapper::Ftps(s) => s.login(user, password),
-        }
-    }
-
-    fn cwd(&mut self, path: &str) -> Result<(), suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.cwd(path),
-            FtpStreamWrapper::Ftps(s) => s.cwd(path),
-        }
-    }
-
-    fn transfer_type(&mut self, filetype: FileType) -> Result<(), suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.transfer_type(filetype),
-            FtpStreamWrapper::Ftps(s) => s.transfer_type(filetype),
-        }
-    }
-
-    fn nlst(&mut self, pathname: Option<&str>) -> Result<Vec<String>, suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.nlst(pathname),
-            FtpStreamWrapper::Ftps(s) => s.nlst(pathname),
-        }
-    }
-
-    fn mdtm(&mut self, pathname: &str) -> Result<chrono::NaiveDateTime, suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.mdtm(pathname),
-            FtpStreamWrapper::Ftps(s) => s.mdtm(pathname),
-        }
-    }
-
-    fn retr<F, D>(&mut self, file_name: &str, callback: F) -> Result<D, suppaftp::FtpError>
-    where
-        F: FnMut(&mut dyn std::io::Read) -> Result<D, suppaftp::FtpError>,
-    {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.retr(file_name, callback),
-            FtpStreamWrapper::Ftps(s) => s.retr(file_name, callback),
-        }
-    }
-
-    fn put_file<R: std::io::Read>(
-        &mut self,
-        filename: &str,
-        reader: &mut R,
-    ) -> Result<u64, suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.put_file(filename, reader),
-            FtpStreamWrapper::Ftps(s) => s.put_file(filename, reader),
-        }
-    }
-
-    fn rename(&mut self, from_name: &str, to_name: &str) -> Result<(), suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.rename(from_name, to_name),
-            FtpStreamWrapper::Ftps(s) => s.rename(from_name, to_name),
-        }
-    }
-
-    fn rm(&mut self, filename: &str) -> Result<(), suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.rm(filename),
-            FtpStreamWrapper::Ftps(s) => s.rm(filename),
-        }
-    }
-
-    fn size(&mut self, pathname: &str) -> Result<usize, suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.size(pathname),
-            FtpStreamWrapper::Ftps(s) => s.size(pathname),
-        }
-    }
-
-    fn quit(&mut self) -> Result<(), suppaftp::FtpError> {
-        match self {
-            FtpStreamWrapper::Ftp(s) => s.quit(),
-            FtpStreamWrapper::Ftps(s) => s.quit(),
-        }
-    }
-}
-
-impl From<FtpStream> for FtpStreamWrapper {
-    fn from(stream: FtpStream) -> Self {
-        FtpStreamWrapper::Ftp(stream)
-    }
-}
-
-impl From<RustlsFtpStream> for FtpStreamWrapper {
-    fn from(stream: RustlsFtpStream) -> Self {
-        FtpStreamWrapper::Ftps(stream)
-    }
-}
-
-/// Connect to FTP/FTPS server with timeout, trying all addresses
-fn connect_server(
-    hostname: &str,
-    port: u16,
-    timeout: Duration,
-    protocol: Protocol,
-    insecure_skip_verify: bool,
-) -> Result<FtpStreamWrapper, suppaftp::FtpError> {
-    let addrs: Vec<std::net::SocketAddr> = (hostname, port)
-        .to_socket_addrs()
-        .map_err(suppaftp::FtpError::ConnectionError)?
-        .collect();
-
-    if addrs.is_empty() {
-        return Err(suppaftp::FtpError::ConnectionError(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "No addresses found",
-        )));
-    }
-
-    let mut last_error = None;
-    for addr in addrs {
-        let result = match protocol {
-            Protocol::Ftp => FtpStream::connect_timeout(addr, timeout).map(FtpStreamWrapper::Ftp),
-            Protocol::Ftps => {
-                // For FTPS, we need to establish TLS connection
-                // Initialize Rustls configuration
-                let provider = rustls::crypto::ring::default_provider();
-                let builder = ClientConfig::builder_with_provider(Arc::new(provider));
-
-                let config = if insecure_skip_verify {
-                    builder
-                        .with_safe_default_protocol_versions()
-                        .map_err(|e| suppaftp::FtpError::SecureError(e.to_string()))?
-                        .dangerous()
-                        .with_custom_certificate_verifier(Arc::new(
-                            danger::NoCertificateVerification,
-                        ))
-                        .with_no_client_auth()
-                } else {
-                    let mut root_store = rustls::RootCertStore::empty();
-                    let certs_result = rustls_native_certs::load_native_certs();
-                    for cert in certs_result.certs {
-                        root_store.add(cert).ok();
-                    }
-                    if !certs_result.errors.is_empty() {
-                        let _ = log_with_thread(
-                            format!(
-                                "Warning: failed to load some native certificates: {:?}",
-                                certs_result.errors
-                            ),
-                            None,
-                        );
-                    }
-                    builder
-                        .with_safe_default_protocol_versions()
-                        .map_err(|e| suppaftp::FtpError::SecureError(e.to_string()))?
-                        .with_root_certificates(root_store)
-                        .with_no_client_auth()
-                };
-
-                let tls_connector = RustlsConnector::from(Arc::new(config));
-
-                // Connect with explicit SSL/TLS from the start
-                // Note: RustlsFtpStream::connect_timeout uses TcpStream::connect_timeout then wraps it
-                match suppaftp::RustlsFtpStream::connect_timeout(addr, timeout) {
-                    Ok(secure_stream) => {
-                        // Switch to secure mode and use PASV for FTPS
-                        secure_stream
-                            .into_secure(tls_connector, hostname)
-                            .and_then(|mut stream| {
-                                // Enable data channel protection (PROT P) for secure data transfer
-                                // Explicitly send PROT P even if into_secure does it, to ensure it is set
-                                let _ = stream.custom_command("PROT P", &[Status::CommandOk])?;
-                                stream.set_mode(Mode::Passive);
-                                stream.set_passive_nat_workaround(true);
-                                Ok(stream)
-                            })
-                            .map(FtpStreamWrapper::Ftps)
-                    }
-                    Err(e) => Err(e),
-                }
-            }
-        };
-        match result {
-            Ok(stream) => return Ok(stream),
-            Err(e) => last_error = Some(e),
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| {
-        suppaftp::FtpError::ConnectionError(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "No addresses available",
-        ))
-    }))
-}
 
 /// Transfers files between FTP/FTPS servers according to configuration
 ///
@@ -318,11 +63,11 @@ pub fn transfer_files(
     let timeout = Duration::from_secs(connect_timeout.unwrap_or(30));
 
     // Connect to the source FTP server
-    let mut ftp_from = match connect_server(
+    let mut ftp_from = match Client::connect(
+        &config.proto_from,
         &config.ip_address_from,
         config.port_from,
         timeout,
-        config.proto_from,
         insecure_skip_verify,
     ) {
         Ok(stream) => stream,
@@ -365,11 +110,11 @@ pub fn transfer_files(
     }
 
     // Connect to the target FTP server
-    let mut ftp_to = match connect_server(
+    let mut ftp_to = match Client::connect(
+        &config.proto_to,
         &config.ip_address_to,
         config.port_to,
         timeout,
-        config.proto_to,
         insecure_skip_verify,
     ) {
         Ok(stream) => stream,
@@ -420,7 +165,8 @@ pub fn transfer_files(
     }
 
     // Set binary mode once for both connections (outside the file loop)
-    if let Err(e) = ftp_from.transfer_type(FileType::Binary) {
+    use crate::protocols::TransferMode;
+    if let Err(e) = ftp_from.transfer_type(TransferMode::Binary) {
         let _ = log_with_thread(
             format!("Error setting binary mode on SOURCE FTP server: {}", e),
             Some(thread_id),
@@ -430,7 +176,7 @@ pub fn transfer_files(
         return 0;
     }
 
-    if let Err(e) = ftp_to.transfer_type(FileType::Binary) {
+    if let Err(e) = ftp_to.transfer_type(TransferMode::Binary) {
         let _ = log_with_thread(
             format!("Error setting binary mode on TARGET FTP server: {}", e),
             Some(thread_id),
@@ -490,7 +236,7 @@ pub fn transfer_files(
         }
 
         // Get the modified time of the file on the FTP server.
-        // suppaftp::FtpStream::mdtm returns Result<chrono::NaiveDateTime, FtpError>
+        // FileTransferClient::mdtm returns Result<chrono::NaiveDateTime, FtpError>
         let datetime_naive = match ftp_from.mdtm(filename.as_str()) {
             Ok(dt) => dt,
             Err(e) => {
@@ -553,7 +299,7 @@ pub fn transfer_files(
         let tmp_filename = format!(".{}.{}.tmp", filename, std::process::id());
 
         // Transfer to temporary file first for atomicity
-        // suppaftp uses retr() with a reader callback for download
+        // FileTransferClient uses retr() with a reader callback for download
         let transfer_result = ftp_from.retr(filename.as_str(), |stream| {
             let mut data = Vec::new();
             let reader = stream;
@@ -818,6 +564,7 @@ pub fn transfer_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Protocol;
     use crate::shutdown::{request_shutdown, reset_shutdown_for_tests};
     use serial_test::serial;
 

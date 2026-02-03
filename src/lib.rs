@@ -11,6 +11,7 @@ pub mod config;
 pub mod ftp_ops;
 pub mod instance;
 pub mod logging;
+pub mod protocols;
 pub mod shutdown;
 
 // Re-export key items for easy use by the binary (main.rs)
@@ -19,6 +20,7 @@ pub use config::{parse_config, Config, Protocol};
 pub use ftp_ops::transfer_files;
 pub use instance::{check_single_instance, cleanup_lock_file, join_listener_thread};
 pub use logging::{log, log_with_thread, set_log_file};
+pub use protocols::{Client, FtpClient, FtpsClient, FileTransferClient, TransferMode};
 pub use shutdown::{is_shutdown_requested, request_shutdown}; // Added request_shutdown
 
 /// Name of the program used for:
