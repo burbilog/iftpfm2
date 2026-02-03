@@ -173,6 +173,10 @@ cargo doc --open
   - `ERROR: Upload verification FAILED: '{tmp_filename}' expected {X} bytes, got {Y} bytes - transfer aborted`
   - `ERROR: Upload verification error for '{tmp_filename}': {error} - transfer aborted`
 
+**Building:**
+- To check "if it builds" — use the Task tool: `cargo build`, return only success/errors.
+- If you need to fix compilation errors — run directly to see the full output.
+
 ## Common Issues to Avoid
 
 1. **Leaking FTP connections** - Always call `quit()` on error paths
