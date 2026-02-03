@@ -1,6 +1,6 @@
 
 all:
-	@echo usage: make debug or make release or make install or make test
+	@echo usage: make debug or make release or make install or make test or make cloc
 
 # install into ~/.cargo/bin
 install: release
@@ -32,3 +32,11 @@ doc:
 	@mkdir -p doc
 	@cp -r target/doc/* doc/
 	@echo "Documentation regenerated in doc/"
+
+# Count lines of code (excludes build directories and other temporary files)
+cloc:
+	@echo "Counting lines of code..."
+	@which cloc >/dev/null 2>&1 || { echo "cloc not found. Install with: sudo apt install cloc"; exit 1; }
+	@cloc --exclude-dir=.git,.claude,target \
+		--exclude-list-file=.gitignore \
+		.
