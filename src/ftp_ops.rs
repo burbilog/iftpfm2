@@ -85,12 +85,14 @@ pub fn transfer_files(
 
     let _ = log_with_thread(
         format!(
-            "Transferring files from {}://{}:{}{} to {}://{}:{}{}",
+            "Transferring files from {}://{}@{}:{}{} to {}://{}@{}:{}{}",
             config.proto_from,
+            config.login_from,
             config.ip_address_from,
             config.port_from,
             config.path_from,
             config.proto_to,
+            config.login_to,
             config.ip_address_to,
             config.port_to,
             config.path_to
@@ -556,8 +558,19 @@ pub fn transfer_files(
     let _ = ftp_from.quit();
     let _ = log_with_thread(
         format!(
-            "Successfully transferred {} files out of {}",
-            successful_transfers, number_of_files
+            "Successfully transferred {} files out of {} from {}://{}@{}:{}{} to {}://{}@{}:{}{}",
+            successful_transfers,
+            number_of_files,
+            config.proto_from,
+            config.login_from,
+            config.ip_address_from,
+            config.port_from,
+            config.path_from,
+            config.proto_to,
+            config.login_to,
+            config.ip_address_to,
+            config.port_to,
+            config.path_to
         ),
         Some(thread_id),
     );
