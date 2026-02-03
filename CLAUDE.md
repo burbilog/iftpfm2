@@ -19,10 +19,9 @@ make release
 make install
 
 # Run all tests (unit + integration)
-cargo test
-./test.sh
-# or
 make test
+# or manually:
+cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh
 
 # Run only unit tests
 cargo test --lib
@@ -62,9 +61,13 @@ cargo doc --open
 **Library modules (src/lib.rs re-exports these):**
 - `cli.rs` - Command-line argument parsing (`parse_args()`)
 - `config.rs` - JSONL config parsing + validation (`parse_config()`, `Config::validate()`)
-- `ftp_ops.rs` - Core FTP transfer logic (`transfer_files()`)
+- `ftp_ops.rs` - Core FTP transfer logic (`transfer_files()`, `verify_final_file()`)
 - `instance.rs` - Single-instance enforcement via PID file + Unix socket
 - `logging.rs` - Thread-safe logging to file/stdout (`log()`, `log_with_thread()`, `set_log_file()`)
+- `protocols/` - Protocol implementations for FTP and FTPS
+  - `protocols/mod.rs` - Trait definitions and `Client` enum wrapper
+  - `protocols/ftp.rs` - FTP protocol implementation (`FtpClient`)
+  - `protocols/ftps.rs` - FTPS protocol implementation (`FtpsClient`)
 - `shutdown.rs` - Async-signal-safe shutdown flag (`is_shutdown_requested()`, `request_shutdown()`)
 
 **Migration script (separate binary):**
@@ -93,8 +96,8 @@ cargo doc --open
 - In non-test code, logging failures never panic (uses `let _ =`)
 
 **FTP Transfer Flow (per config entry):**
-1. Connect to source FTP/FTPS (using `connect_server()` with protocol from `proto_from`)
-2. Connect to target FTP/FTPS (using `connect_server()` with protocol from `proto_to`)
+1. Connect to source FTP/FTPS (using `Client::connect()` with protocol from `proto_from`)
+2. Connect to target FTP/FTPS (using `Client::connect()` with protocol from `proto_to`)
 3. Login to both servers
 4. CWD to path on both servers
 5. Set binary mode once on both connections (outside the file loop)
@@ -103,17 +106,18 @@ cargo doc --open
    - Check regex match
    - Get MDTM (modified time)
    - Check file age
-   - Delete from target if exists
    - Transfer via `retr()` + `put_file()` to temporary file
-   - Verify upload size (if `--upload-verify` flag is set)
-   - Rename temporary file to final name
-   - Delete from source if `-d` flag
+   - Verify upload size (MANDATORY - transfer fails if verification fails)
+   - Rename temporary file to final name (retry after deleting existing file if rename fails)
+   - Verify final file size using `verify_final_file()` (MANDATORY)
+   - Delete from source if `-d` flag (only after successful verification)
 8. Call `quit()` on both connections
 9. Log summary
 
 **FTPS Support:**
 - Protocol selected via `proto_from`/`proto_to` config fields (`ftp` or `ftps`)
-- For FTPS, `connect_server()` creates a `TlsConnector` and calls `into_secure()`
+- `Client::connect()` creates either `FtpClient` or `FtpsClient` based on protocol
+- `FtpsClient` creates a `TlsConnector` and calls `into_secure()` on the FTP stream
 - Use `--insecure-skip-verify` CLI flag to bypass certificate verification (for self-signed certs)
 - Default: `TlsConnector::new()` - verifies certificates
 - With flag: `TlsConnector::builder().danger_accept_invalid_certs(true).build()`
@@ -149,6 +153,9 @@ cargo doc --open
 - Unit tests use `serial_test` for tests that modify global state
 - `reset_shutdown_for_tests()` available to reset shutdown flag between tests
 - Integration tests use real FTP/FTPS servers (test.sh, test_ftps.sh, test_conn_timeout.sh, test_age.sh)
+- **Run all tests (unit + integration):** `make test` in the project root directory
+  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, and `./test_ftps.sh`
+  - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
 
 **Connection Timeout:**
 - Configurable via `-t seconds` CLI flag (default: 30 seconds)

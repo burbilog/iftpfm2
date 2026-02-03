@@ -6,6 +6,44 @@ use regex::Regex;
 use std::io::Cursor;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Verify final file size after rename
+///
+/// Returns true if verification passed, false otherwise
+fn verify_final_file(
+    ftp_to: &mut Client,
+    filename: &str,
+    file_size: usize,
+    thread_id: usize,
+) -> bool {
+    match ftp_to.size(filename) {
+        Ok(actual_size) => {
+            if actual_size == file_size {
+                let _ = log_with_thread(
+                    format!(
+                        "Final file verification passed: '{}' is {} bytes",
+                        filename, actual_size
+                    ),
+                    Some(thread_id),
+                );
+                true
+            } else {
+                let _ = log_with_thread(format!(
+                    "ERROR: Final file verification FAILED: '{}' expected {} bytes, got {} bytes - transfer aborted",
+                    filename, file_size, actual_size
+                ), Some(thread_id));
+                false
+            }
+        }
+        Err(e) => {
+            let _ = log_with_thread(format!(
+                "ERROR: Final file verification error for '{}': {} - transfer aborted",
+                filename, e
+            ), Some(thread_id));
+            false
+        }
+    }
+}
+
 /// Transfers files between FTP/FTPS servers according to configuration
 ///
 /// # Arguments
@@ -148,7 +186,7 @@ pub fn transfer_files(
     }
 
     let _ = log_with_thread(
-        format!("TARGET FTPS login successful, proto_to={}", config.proto_to),
+        format!("TARGET {} login successful", config.proto_to),
         Some(thread_id),
     );
     if let Err(e) = ftp_to.cwd(config.path_to.as_str()) {
@@ -186,7 +224,10 @@ pub fn transfer_files(
         return 0;
     }
 
-    let _ = log_with_thread("TARGET FTPS binary mode set successfully", Some(thread_id));
+    let _ = log_with_thread(
+        format!("TARGET {} binary mode set successfully", config.proto_to),
+        Some(thread_id),
+    );
 
     // Get the list of files in the source directory
     let file_list = match ftp_from.nlst(None) {
@@ -381,30 +422,12 @@ pub fn transfer_files(
                             match rename_result {
                                 Ok(_) => {
                                     // Verify final file after rename (MANDATORY)
-                                    let final_verified = match ftp_to.size(filename.as_str()) {
-                                        Ok(actual_size) => {
-                                            if actual_size == file_size {
-                                                let _ = log_with_thread(format!(
-                                                    "Final file verification passed: '{}' is {} bytes",
-                                                    filename, actual_size
-                                                ), Some(thread_id));
-                                                true
-                                            } else {
-                                                let _ = log_with_thread(format!(
-                                                    "ERROR: Final file verification FAILED: '{}' expected {} bytes, got {} bytes - transfer aborted",
-                                                    filename, file_size, actual_size
-                                                ), Some(thread_id));
-                                                false
-                                            }
-                                        }
-                                        Err(e) => {
-                                            let _ = log_with_thread(format!(
-                                                "ERROR: Final file verification error for '{}': {} - transfer aborted",
-                                                filename, e
-                                            ), Some(thread_id));
-                                            false
-                                        }
-                                    };
+                                    let final_verified = verify_final_file(
+                                        &mut ftp_to,
+                                        filename.as_str(),
+                                        file_size,
+                                        thread_id,
+                                    );
 
                                     if final_verified {
                                         let _ = log_with_thread(
@@ -447,32 +470,12 @@ pub fn transfer_files(
                                     match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
                                         Ok(_) => {
                                             // Verify final file after rename (MANDATORY)
-                                            let final_verified = match ftp_to
-                                                .size(filename.as_str())
-                                            {
-                                                Ok(actual_size) => {
-                                                    if actual_size == file_size {
-                                                        let _ = log_with_thread(format!(
-                                                            "Final file verification passed: '{}' is {} bytes",
-                                                            filename, actual_size
-                                                        ), Some(thread_id));
-                                                        true
-                                                    } else {
-                                                        let _ = log_with_thread(format!(
-                                                            "ERROR: Final file verification FAILED: '{}' expected {} bytes, got {} bytes - transfer aborted",
-                                                            filename, file_size, actual_size
-                                                        ), Some(thread_id));
-                                                        false
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    let _ = log_with_thread(format!(
-                                                        "ERROR: Final file verification error for '{}': {} - transfer aborted",
-                                                        filename, e
-                                                    ), Some(thread_id));
-                                                    false
-                                                }
-                                            };
+                                            let final_verified = verify_final_file(
+                                                &mut ftp_to,
+                                                filename.as_str(),
+                                                file_size,
+                                                thread_id,
+                                            );
 
                                             if final_verified {
                                                 let _ = log_with_thread(

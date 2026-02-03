@@ -2,6 +2,20 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.3.0] - 2026-02-03
+
+### Added
+- **Separate protocol modules** - FTP and FTPS implementations split into distinct modules (`protocols::ftp` and `protocols::ftps`)
+- `verify_final_file()` helper function for final file size verification
+
+### Fixed
+- **Incorrect protocol logging** - log messages now correctly display "ftp" or "ftps" instead of hardcoded "FTPS"
+  - "TARGET FTPS login successful" -> "TARGET {proto} login successful"
+  - "TARGET FTPS binary mode set successfully" -> "TARGET {proto} binary mode set successfully"
+- **Code duplication** - final file verification logic extracted into reusable function
+
+---
+
 ## [2.2.1] - 2026-02-02
 
 ### Fixed
@@ -157,6 +171,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.3.0** - Separate protocol modules, logging fixes, code deduplication
 - **2.2.1** - Improved error messages, code quality improvements
 - **2.2.0** - FTPS protocol support, connection timeout, self-signed certificates
 - **2.1.1** - suppaftp migration, atomic operations, race condition fixes
