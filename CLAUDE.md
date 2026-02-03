@@ -48,6 +48,10 @@ cargo doc --open
 - `test_ftps.sh` - FTPS with self-signed certificates test
   - Generates self-signed certificate using openssl
   - Tests with and without `--insecure-skip-verify` flag
+- `test_sftp_docker.sh` - SFTP test (separate `make test-sftp` target)
+  - Prerequisites: Docker with `atmoz/sftp` container
+  - Starts two SFTP servers on ports 3222/3223
+  - Tests password authentication, delete flag, and regex filtering
 
 ## Project Architecture
 
@@ -64,10 +68,11 @@ cargo doc --open
 - `ftp_ops.rs` - Core FTP transfer logic (`transfer_files()`, `verify_final_file()`)
 - `instance.rs` - Single-instance enforcement via PID file + Unix socket
 - `logging.rs` - Thread-safe logging to file/stdout (`log()`, `log_with_thread()`, `set_log_file()`)
-- `protocols/` - Protocol implementations for FTP and FTPS
+- `protocols/` - Protocol implementations for FTP, FTPS, and SFTP
   - `protocols/mod.rs` - Trait definitions and `Client` enum wrapper
   - `protocols/ftp.rs` - FTP protocol implementation (`FtpClient`)
   - `protocols/ftps.rs` - FTPS protocol implementation (`FtpsClient`)
+  - `protocols/sftp.rs` - SFTP protocol implementation (`SftpClient`)
 - `shutdown.rs` - Async-signal-safe shutdown flag (`is_shutdown_requested()`, `request_shutdown()`)
 
 **Migration script (separate binary):**
@@ -96,8 +101,8 @@ cargo doc --open
 - In non-test code, logging failures never panic (uses `let _ =`)
 
 **FTP Transfer Flow (per config entry):**
-1. Connect to source FTP/FTPS (using `Client::connect()` with protocol from `proto_from`)
-2. Connect to target FTP/FTPS (using `Client::connect()` with protocol from `proto_to`)
+1. Connect to source FTP/FTPS/SFTP (using `Client::connect()` with protocol from `proto_from`)
+2. Connect to target FTP/FTPS/SFTP (using `Client::connect()` with protocol from `proto_to`)
 3. Login to both servers
 4. CWD to path on both servers
 5. Set binary mode once on both connections (outside the file loop)
@@ -122,9 +127,22 @@ cargo doc --open
 - Default: `TlsConnector::new()` - verifies certificates
 - With flag: `TlsConnector::builder().danger_accept_invalid_certs(true).build()`
 
+**SFTP Support:**
+- Protocol selected via `proto_from`/`proto_to` config fields (`sftp`)
+- `Client::connect()` creates `SftpClient` for SFTP connections
+- Uses `ssh2` crate for SSH file transfer operations
+- Authentication methods:
+  - Password auth: `password_from`/`password_to` fields
+  - Key auth: `keyfile_from`/`keyfile_to` fields (path to SSH private key)
+- SFTP doesn't have a true "current working directory" concept like FTP
+  - `SftpClient` tracks `current_dir` internally to maintain compatibility with FTP operations
+  - All file operations (`mdtm`, `size`, `retr`, `put_file`, `rename`, `rm`) prepend `current_dir` to filenames
+- SFTP test: `make test-sftp` (uses Docker atmoz/sftp container, separate from main test suite)
+
 **Config Validation:**
 - All fields validated during parsing (non-empty hosts/logins/passwords/paths, ports > 0, age > 0, valid regex)
 - `proto_from` and `proto_to` default to `Protocol::Ftp` if not specified
+- For SFTP: either password OR keyfile must be specified (validated in config parsing)
 - Regex pattern validated once during parsing (not re-validated during transfer)
 
 ## Important Implementation Notes
@@ -153,6 +171,7 @@ cargo doc --open
 - Unit tests use `serial_test` for tests that modify global state
 - `reset_shutdown_for_tests()` available to reset shutdown flag between tests
 - Integration tests use real FTP/FTPS servers (test.sh, test_ftps.sh, test_conn_timeout.sh, test_age.sh)
+- SFTP tests: `make test-sftp` (separate target, uses Docker atmoz/sftp container)
 - **Run all tests (unit + integration):** `make test` in the project root directory
   - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, and `./test_ftps.sh`
   - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
@@ -160,7 +179,7 @@ cargo doc --open
 **Connection Timeout:**
 - Configurable via `-t seconds` CLI flag (default: 30 seconds)
 - Passed to `connect_server()` as `Duration`
-- Applied via `connect_timeout()` methods for both FTP and FTPS
+- Applied via `connect_timeout()` methods for FTP/FTPS, and stream timeouts for SFTP
 - Error messages include the timeout value for debugging
 
 **Upload Verification (Mandatory):**
@@ -179,7 +198,7 @@ cargo doc --open
 
 ## Common Issues to Avoid
 
-1. **Leaking FTP connections** - Always call `quit()` on error paths
+1. **Leaking FTP/SFTP connections** - Always call `quit()` on error paths
 2. **Panicking on log failure** - Use `let _ = log(...)` pattern
 3. **I/O in signal handlers** - Only set atomic flags, defer logging
 4. **Blocking on listener thread join** - Listener thread is blocked on `incoming()`, spawn a thread to join it instead

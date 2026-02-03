@@ -11,51 +11,53 @@
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">pub mod </span>ftp_ops;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">pub mod </span>instance;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">pub mod </span>logging;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">pub mod </span>shutdown;
-<a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="comment">// Re-export key items for easy use by the binary (main.rs)
-<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub use </span>cli::parse_args;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub use </span>config::{parse_config, Config};
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub use </span>ftp_ops::transfer_files;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">pub use </span>instance::{check_single_instance, cleanup_lock_file, join_listener_thread};
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">pub use </span>logging::{log, log_with_thread, set_log_file};
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">pub use </span>shutdown::{is_shutdown_requested, request_shutdown}; <span class="comment">// Added request_shutdown
-<a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a></span><span class="doccomment">/// Name of the program used for:
-<a href=#25 id=25 data-nosnippet>25</a>/// - Process identification
-<a href=#26 id=26 data-nosnippet>26</a>/// - Lock files (/tmp/{PROGRAM_NAME}.pid)
-<a href=#27 id=27 data-nosnippet>27</a>/// - Unix domain socket (/tmp/{PROGRAM_NAME}.sock)
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">pub const </span>PROGRAM_NAME: <span class="kw-2">&amp;</span>str = <span class="string">"iftpfm2"</span>;
-<a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a><span class="doccomment">/// Current version of the program (from Cargo.toml via CARGO_PKG_VERSION)
-<a href=#31 id=31 data-nosnippet>31</a>///
-<a href=#32 id=32 data-nosnippet>32</a>/// This is automatically set by Cargo during compilation based on the
-<a href=#33 id=33 data-nosnippet>33</a>/// version field in Cargo.toml. Do not edit this value directly - update
-<a href=#34 id=34 data-nosnippet>34</a>/// Cargo.toml instead.
-<a href=#35 id=35 data-nosnippet>35</a>/// Follows semantic versioning (MAJOR.MINOR.PATCH)
-<a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">pub const </span>PROGRAM_VERSION: <span class="kw-2">&amp;</span>str = <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>);
-<a href=#37 id=37 data-nosnippet>37</a>
-<a href=#38 id=38 data-nosnippet>38</a><span class="comment">// Dependencies that were in main.rs and are used by multiple modules,
-<a href=#39 id=39 data-nosnippet>39</a>// or are fundamental to the library's operation, can be listed here
-<a href=#40 id=40 data-nosnippet>40</a>// or within the specific modules that use them.
-<a href=#41 id=41 data-nosnippet>41</a>// For now, each module handles its own specific imports.
-<a href=#42 id=42 data-nosnippet>42</a>// Common ones like `std::io`, `std::process` are used directly in modules.
-<a href=#43 id=43 data-nosnippet>43</a>// External crates like `ftp`, `regex`, `chrono`, `once_cell`, `rayon`, `ctrlc`, `scopeguard`
-<a href=#44 id=44 data-nosnippet>44</a>// will need to be listed in Cargo.toml and then `use`d in the modules that need them.
-<a href=#45 id=45 data-nosnippet>45</a>
-<a href=#46 id=46 data-nosnippet>46</a>// Example of how PROGRAM_NAME and PROGRAM_VERSION might be used from within a module if not passed:
-<a href=#47 id=47 data-nosnippet>47</a>// use crate::{PROGRAM_NAME, PROGRAM_VERSION};
-<a href=#48 id=48 data-nosnippet>48</a>// This is now handled by making them pub const in lib.rs and modules using `crate::PROGRAM_NAME`.
-<a href=#49 id=49 data-nosnippet>49</a>
-<a href=#50 id=50 data-nosnippet>50</a>// The `main` function in `src/main.rs` will now primarily use items from this library crate.
-<a href=#51 id=51 data-nosnippet>51</a>// e.g. `use iftpfm2::config::parse_config;` or `use iftpfm2::*;`
-<a href=#52 id=52 data-nosnippet>52</a>//
-<a href=#53 id=53 data-nosnippet>53</a>// We'll need to ensure that all necessary `pub` keywords are used within each module
-<a href=#54 id=54 data-nosnippet>54</a>// for items that need to be accessed by other modules or by `main.rs` via this lib.rs.
-<a href=#55 id=55 data-nosnippet>55</a>// For example, `Config` struct in `config.rs` must be `pub struct Config`.
-<a href=#56 id=56 data-nosnippet>56</a>// Functions like `parse_config` must be `pub fn parse_config`.
-<a href=#57 id=57 data-nosnippet>57</a>// Statics like `LOG_FILE` in `logging.rs` must be `pub static LOG_FILE`.
-<a href=#58 id=58 data-nosnippet>58</a>
-<a href=#59 id=59 data-nosnippet>59</a>// Note: The temporary const declarations for PROGRAM_NAME in cli.rs and instance.rs
-<a href=#60 id=60 data-nosnippet>60</a>// were removed, and those modules now use `crate::PROGRAM_NAME` as intended.
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">pub mod </span>protocols;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">pub mod </span>shutdown;
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a><span class="comment">// Re-export key items for easy use by the binary (main.rs)
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub use </span>cli::parse_args;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub use </span>config::{parse_config, Config, Protocol};
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">pub use </span>ftp_ops::transfer_files;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">pub use </span>instance::{check_single_instance, cleanup_lock_file, join_listener_thread};
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">pub use </span>logging::{log, log_with_thread, set_log_file};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub use </span>protocols::{Client, FtpClient, FtpsClient, FileTransferClient, TransferMode};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub use </span>shutdown::{is_shutdown_requested, request_shutdown}; <span class="comment">// Added request_shutdown
+<a href=#25 id=25 data-nosnippet>25</a>
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="doccomment">/// Name of the program used for:
+<a href=#27 id=27 data-nosnippet>27</a>/// - Process identification
+<a href=#28 id=28 data-nosnippet>28</a>/// - Lock files (/tmp/{PROGRAM_NAME}.pid)
+<a href=#29 id=29 data-nosnippet>29</a>/// - Unix domain socket (/tmp/{PROGRAM_NAME}.sock)
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub const </span>PROGRAM_NAME: <span class="kw-2">&amp;</span>str = <span class="string">"iftpfm2"</span>;
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Current version of the program (from Cargo.toml via CARGO_PKG_VERSION)
+<a href=#33 id=33 data-nosnippet>33</a>///
+<a href=#34 id=34 data-nosnippet>34</a>/// This is automatically set by Cargo during compilation based on the
+<a href=#35 id=35 data-nosnippet>35</a>/// version field in Cargo.toml. Do not edit this value directly - update
+<a href=#36 id=36 data-nosnippet>36</a>/// Cargo.toml instead.
+<a href=#37 id=37 data-nosnippet>37</a>/// Follows semantic versioning (MAJOR.MINOR.PATCH)
+<a href=#38 id=38 data-nosnippet>38</a></span><span class="kw">pub const </span>PROGRAM_VERSION: <span class="kw-2">&amp;</span>str = <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>);
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a><span class="comment">// Dependencies that were in main.rs and are used by multiple modules,
+<a href=#41 id=41 data-nosnippet>41</a>// or are fundamental to the library's operation, can be listed here
+<a href=#42 id=42 data-nosnippet>42</a>// or within the specific modules that use them.
+<a href=#43 id=43 data-nosnippet>43</a>// For now, each module handles its own specific imports.
+<a href=#44 id=44 data-nosnippet>44</a>// Common ones like `std::io`, `std::process` are used directly in modules.
+<a href=#45 id=45 data-nosnippet>45</a>// External crates like `ftp`, `regex`, `chrono`, `once_cell`, `rayon`, `ctrlc`, `scopeguard`
+<a href=#46 id=46 data-nosnippet>46</a>// will need to be listed in Cargo.toml and then `use`d in the modules that need them.
+<a href=#47 id=47 data-nosnippet>47</a>
+<a href=#48 id=48 data-nosnippet>48</a>// Example of how PROGRAM_NAME and PROGRAM_VERSION might be used from within a module if not passed:
+<a href=#49 id=49 data-nosnippet>49</a>// use crate::{PROGRAM_NAME, PROGRAM_VERSION};
+<a href=#50 id=50 data-nosnippet>50</a>// This is now handled by making them pub const in lib.rs and modules using `crate::PROGRAM_NAME`.
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a>// The `main` function in `src/main.rs` will now primarily use items from this library crate.
+<a href=#53 id=53 data-nosnippet>53</a>// e.g. `use iftpfm2::config::parse_config;` or `use iftpfm2::*;`
+<a href=#54 id=54 data-nosnippet>54</a>//
+<a href=#55 id=55 data-nosnippet>55</a>// We'll need to ensure that all necessary `pub` keywords are used within each module
+<a href=#56 id=56 data-nosnippet>56</a>// for items that need to be accessed by other modules or by `main.rs` via this lib.rs.
+<a href=#57 id=57 data-nosnippet>57</a>// For example, `Config` struct in `config.rs` must be `pub struct Config`.
+<a href=#58 id=58 data-nosnippet>58</a>// Functions like `parse_config` must be `pub fn parse_config`.
+<a href=#59 id=59 data-nosnippet>59</a>// Statics like `LOG_FILE` in `logging.rs` must be `pub static LOG_FILE`.
+<a href=#60 id=60 data-nosnippet>60</a>
+<a href=#61 id=61 data-nosnippet>61</a>// Note: The temporary const declarations for PROGRAM_NAME in cli.rs and instance.rs
+<a href=#62 id=62 data-nosnippet>62</a>// were removed, and those modules now use `crate::PROGRAM_NAME` as intended.
 </span></code></pre></div></section></main></body></html>

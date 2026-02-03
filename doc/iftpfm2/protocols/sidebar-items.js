@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Client","TransferMode"],"mod":["ftp","ftps","sftp"],"struct":["ProtocolConfig"],"trait":["FileTransferClient"],"type":["FtpError"]};

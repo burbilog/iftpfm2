@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["parse_config"],"struct":["Config"]};
+window.SIDEBAR_ITEMS = {"enum":["Protocol"],"fn":["parse_config"],"struct":["Config"]};

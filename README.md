@@ -1,7 +1,7 @@
 iftpfm2
 =======
 
-"iftpfm2" is a command-line utility that transfers files between FTP servers based on a configuration file. The name "iftpfm" stands for "Idiotic FTP File Mover" - it was created to solve the problem of transferring large numbers of files between multiple FTP servers and directories when using 1C software. Since 1C lacks the ability to write to temporary files and rename them atomically, simple tools like ncftpget/ncftpput can result in transferring incomplete files. The '2' suffix indicates this is the second version, replacing an original messy bash script.
+"iftpfm2" is a command-line utility that transfers files between FTP/FTPS/SFTP servers based on a configuration file. The name "iftpfm" stands for "Idiotic FTP File Mover" - it was created to solve the problem of transferring large numbers of files between multiple FTP/SFTP servers and directories when using 1C software. Since 1C lacks the ability to write to temporary files and rename them atomically, simple tools like ncftpget/ncftpput can result in transferring incomplete files. The '2' suffix indicates this is the second version, replacing an original messy bash script.
 
 As of January 2023, I had no prior Rust experience before creating this tool. The program was developed primarily with ChatGPT's assistance, which implemented the necessary features by following my plain English instructions. Despite being my first Rust project, the process went remarkably smoothly thanks to ChatGPT handling the heavy lifting and answering numerous basic questions.
 
@@ -125,18 +125,20 @@ To use iftpfm2, you need to create a configuration file that specifies the conne
 ~~~
 
 Where:
-- `host_from`: Source FTP server hostname/IP (string)
-- `port_from`: Source FTP port (number, typically 21)
-- `login_from`: Source FTP username (string)
-- `password_from`: Source FTP password (string)
+- `host_from`: Source server hostname/IP (string)
+- `port_from`: Source port (number, typically 21 for FTP/FTPS, 22 for SFTP)
+- `login_from`: Source username (string)
+- `password_from`: Source password (string, for FTP/FTPS/SFTP password auth)
+- `keyfile_from`: Source SSH private key path (string, optional for SFTP key auth)
 - `path_from`: Source directory path (must be literal path, no wildcards)
-- `proto_from`: Source protocol - "ftp" or "ftps" (optional, default: "ftp")
-- `host_to`: Destination FTP server hostname/IP (string)
-- `port_to`: Destination FTP port (number, typically 21)
-- `login_to`: Destination FTP username (string)
-- `password_to`: Destination FTP password (string)
+- `proto_from`: Source protocol - "ftp", "ftps", or "sftp" (optional, default: "ftp")
+- `host_to`: Destination server hostname/IP (string)
+- `port_to`: Destination port (number, typically 21 for FTP/FTPS, 22 for SFTP)
+- `login_to`: Destination username (string)
+- `password_to`: Destination password (string, for FTP/FTPS/SFTP password auth)
+- `keyfile_to`: Destination SSH private key path (string, optional for SFTP key auth)
 - `path_to`: Destination directory path (string)
-- `proto_to`: Destination protocol - "ftp" or "ftps" (optional, default: "ftp")
+- `proto_to`: Destination protocol - "ftp", "ftps", or "sftp" (optional, default: "ftp")
 - `age`: Minimum file age to transfer (seconds, number)
 - `filename_regexp`: Regular expression pattern to match files (string)
 
@@ -209,6 +211,18 @@ Run with `--insecure-skip-verify` to skip certificate verification (use only for
 
 ```
 iftpfm2 --insecure-skip-verify config.jsonl
+```
+
+SFTP with password authentication:
+
+```
+{"host_from":"sftp.example.com","port_from":22,"login_from":"user1","password_from":"pass1","path_from":"/outgoing","proto_from":"sftp","host_to":"sftp.example.com","port_to":22,"login_to":"user2","password_to":"pass2","path_to":"/incoming","proto_to":"sftp","age":86400,"filename_regexp":".*\\.csv$"}
+```
+
+SFTP with SSH key authentication (requires `keyfile_from`/`keyfile_to` fields):
+
+```
+{"host_from":"sftp.example.com","port_from":22,"login_from":"user1","keyfile_from":"/home/user/.ssh/id_rsa","path_from":"/outgoing","proto_from":"sftp","host_to":"sftp.example.com","port_to":22,"login_to":"user2","keyfile_to":"/home/user/.ssh/id_rsa","path_to":"/incoming","proto_to":"sftp","age":86400,"filename_regexp":".*\\.csv$"}
 ```
 
 Author
