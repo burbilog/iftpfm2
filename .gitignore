@@ -2,3 +2,4 @@ target/
 .aider*
 Cargo.lock
 repomix-output.xml
+.cecli*
