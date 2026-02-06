@@ -4,7 +4,7 @@ use secrecy::ExposeSecret;
 use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
 use regex::Regex;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
 
@@ -198,23 +198,19 @@ impl TransferBuffer {
     }
 
     /// Create a reader for the buffer
-    /// Returns Box<dyn Read> for unified interface
-    fn into_reader(self) -> Box<dyn Read + Send> {
+    /// Returns Result for proper error handling in library code
+    fn into_reader(self) -> Result<Box<dyn Read + Send>, std::io::Error> {
         match self {
-            TransferBuffer::Ram(vec) => Box::new(Cursor::new(vec)),
+            TransferBuffer::Ram(vec) => Ok(Box::new(Cursor::new(vec))),
             TransferBuffer::Disk(temp_file) => {
                 // reopen() creates a new handle to the same file
                 match temp_file.reopen() {
-                    Ok(reader) => Box::new(reader),
+                    Ok(reader) => Ok(Box::new(reader) as Box<dyn Read + Send>),
                     Err(_) => {
                         // Fallback: try to read from the original file path
                         // This shouldn't happen in practice as NamedTempFile persists until dropped
-                        Box::new(std::fs::File::open(temp_file.path()).unwrap_or_else(|_| {
-                            std::io::stderr()
-                                .write_all(b"Critical error: failed to open temp file\n")
-                                .ok();
-                            std::process::exit(1);
-                        }))
+                        std::fs::File::open(temp_file.path())
+                            .map(|f| Box::new(f) as Box<dyn Read + Send>)
                     }
                 }
             }
@@ -558,8 +554,17 @@ pub fn transfer_files(
                 );
 
                 // Upload the data to target server using put_file() with a reader
-                // TransferBuffer::into_reader() returns Box<dyn Read + Send>
-                let mut reader = buffer.into_reader();
+                // TransferBuffer::into_reader() returns Result<Box<dyn Read + Send>, io::Error>
+                let mut reader = match buffer.into_reader() {
+                    Ok(r) => r,
+                    Err(e) => {
+                        let _ = log_with_thread(
+                            format!("ERROR: Failed to create reader for buffer: {}, skipping file", e),
+                            Some(thread_id),
+                        );
+                        continue; // Skip to next file
+                    }
+                };
                 match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
                     Ok(bytes_written) => {
                         let _ = log_with_thread(
