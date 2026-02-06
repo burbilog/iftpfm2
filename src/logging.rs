@@ -94,6 +94,8 @@ pub fn log_with_thread<T: AsRef<str>>(message: T, thread_id: Option<usize>) -> i
     // Generate a timestamp for the log message
     let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let message_ref = message.as_ref();
+    // Strip newlines from message to ensure consistent single-line log formatting
+    let message_ref = message_ref.replace('\n', " ");
     let log_message = match thread_id {
         Some(tid) => format!("{} [T{}] {}\n", timestamp, tid, message_ref),
         None => format!("{} {}\n", timestamp, message_ref),

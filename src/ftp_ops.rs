@@ -21,7 +21,7 @@ fn connect_and_login(
     host: &str,
     port: u16,
     login: &str,
-    password: Option<&str>,
+    password: Option<&String>,
     keyfile: Option<&str>,
     path: &str,
     timeout: Duration,
@@ -34,8 +34,8 @@ fn connect_and_login(
     let _ = log_with_thread(format!("[{}] Connecting to {}:{}...", proto, host, port), Some(thread_id));
 
     let password_for_login = match proto {
-        Protocol::Sftp if keyfile.is_some() => password.unwrap_or(""),
-        _ => password.ok_or_else(|| {
+        Protocol::Sftp if keyfile.is_some() => password.map(|s| s.as_str()).unwrap_or(""),
+        _ => password.map(|s| s.as_str()).ok_or_else(|| {
             format!(
                 "BUG: Password required for {} but was None (should have been caught during config validation)",
                 proto
@@ -43,7 +43,7 @@ fn connect_and_login(
         })?,
     };
 
-    let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password, keyfile) {
+    let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password.map(|s| s.as_str()), keyfile) {
         Ok(c) => {
             let _ = log_with_thread(format!("[{}] Connected successfully", proto), Some(thread_id));
             c
@@ -104,8 +104,7 @@ fn check_file_should_transfer(
             let _ = log_with_thread(
                 format!(
                     "Error getting modified time for file '{}': {}, skipping",
-                    filename,
-                    e.to_string().replace("\n", "")
+                    filename, e
                 ),
                 Some(thread_id),
             );
@@ -164,8 +163,7 @@ fn check_file_should_transfer(
             let _ = log_with_thread(
                 format!(
                     "Error getting size for file '{}': {}, skipping",
-                    filename,
-                    e.to_string().replace("\n", "")
+                    filename, e
                 ),
                 Some(thread_id),
             );
@@ -365,7 +363,7 @@ pub fn transfer_files(
         &config.ip_address_from,
         config.port_from,
         &config.login_from,
-        config.password_from.as_ref().map(|s| s.expose_secret().as_str()),
+        config.password_from.as_ref().map(|s| s.expose_secret()),
         config.keyfile_from.as_deref(),
         &config.path_from,
         timeout,
@@ -386,7 +384,7 @@ pub fn transfer_files(
         &config.ip_address_to,
         config.port_to,
         &config.login_to,
-        config.password_to.as_ref().map(|s| s.expose_secret().as_str()),
+        config.password_to.as_ref().map(|s| s.expose_secret()),
         config.keyfile_to.as_deref(),
         &config.path_to,
         timeout,
@@ -452,8 +450,16 @@ pub fn transfer_files(
     );
 
     // Compile regex once for all files (config parser already validated it)
-    let regex = Regex::new(&config.filename_regexp)
-        .expect("Regex pattern should be valid (validated in config parser)");
+    let regex = match Regex::new(&config.filename_regexp) {
+        Ok(re) => re,
+        Err(e) => {
+            let _ = log_with_thread(
+                format!("ERROR: Invalid regex pattern '{}': {}", config.filename_regexp, e),
+                Some(thread_id),
+            );
+            return 1;
+        }
+    };
 
     let mut successful_transfers = 0;
     for filename in file_list {
@@ -501,7 +507,7 @@ pub fn transfer_files(
         let tmp_filename = format!(".{}.{}.tmp", filename, std::process::id());
 
         // Transfer with conditional storage (RAM or disk)
-        let transfer_result = ftp_from.retr(filename.as_str(), |stream| {
+        let transfer_result = ftp_from.retr(&filename, |stream| {
             if use_ram {
                 // RAM path: Vec<u8> buffer
                 let mut buffer = Vec::with_capacity(file_size as usize);
@@ -605,14 +611,14 @@ pub fn transfer_files(
                             // Upload successful, now rename the temporary file
                             // Atomic rename: first try to rename directly
                             let rename_result =
-                                ftp_to.rename(tmp_filename.as_str(), filename.as_str());
+                                ftp_to.rename(&tmp_filename, &filename);
 
                             match rename_result {
                                 Ok(_) => {
                                     if handle_successful_rename(
                                         &mut ftp_to,
                                         &mut ftp_from,
-                                        filename.as_str(),
+                                        &filename,
                                         file_size,
                                         thread_id,
                                         delete,
@@ -643,19 +649,19 @@ pub fn transfer_files(
                                     //
                                     // Alternative protocols like SFTP may have different semantics,
                                     // but we implement consistent behavior across all protocols.
-                                    if ftp_to.rm(filename.as_str()).is_ok() {
+                                    if ftp_to.rm(&filename).is_ok() {
                                         let _ = log_with_thread(
                                             format!("Replaced existing file {}", filename),
                                             Some(thread_id),
                                         );
                                     }
 
-                                    match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
+                                    match ftp_to.rename(&tmp_filename, &filename) {
                                         Ok(_) => {
                                             if handle_successful_rename(
                                                 &mut ftp_to,
                                                 &mut ftp_from,
-                                                filename.as_str(),
+                                                &filename,
                                                 file_size,
                                                 thread_id,
                                                 delete,

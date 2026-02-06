@@ -100,7 +100,7 @@ pub trait FileTransferClient {
 /// Transfer mode for file operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransferMode {
-    /// Binary mode (untransferred)
+    /// Binary mode (untranslated)
     Binary,
     /// ASCII/text mode (with line ending conversion)
     ASCII,

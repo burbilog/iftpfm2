@@ -18,6 +18,13 @@ pub struct SftpClient {
     current_dir: String,
 }
 
+impl SftpClient {
+    /// Helper function to build full path from current directory and filename
+    fn full_path(&self, filename: &str) -> String {
+        format!("{}/{}", self.current_dir.trim_end_matches('/'), filename)
+    }
+}
+
 impl FileTransferClient for SftpClient {
     fn connect(
         host: &str,
@@ -182,7 +189,7 @@ impl FileTransferClient for SftpClient {
     }
 
     fn mdtm(&mut self, filename: &str) -> Result<chrono::NaiveDateTime, FtpError> {
-        let full_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), filename);
+        let full_path = self.full_path(filename);
         let stat = self.sftp.stat(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -210,7 +217,7 @@ impl FileTransferClient for SftpClient {
     }
 
     fn size(&mut self, filename: &str) -> Result<usize, FtpError> {
-        let full_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), filename);
+        let full_path = self.full_path(filename);
         let stat = self.sftp.stat(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -224,7 +231,7 @@ impl FileTransferClient for SftpClient {
     where
         F: FnMut(&mut dyn Read) -> Result<D, FtpError>,
     {
-        let full_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), filename);
+        let full_path = self.full_path(filename);
         let mut file = self.sftp.open(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -240,7 +247,7 @@ impl FileTransferClient for SftpClient {
         filename: &str,
         reader: &mut R,
     ) -> Result<u64, FtpError> {
-        let full_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), filename);
+        let full_path = self.full_path(filename);
         let mut file = self.sftp.create(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -252,8 +259,8 @@ impl FileTransferClient for SftpClient {
     }
 
     fn rename(&mut self, from: &str, to: &str) -> Result<(), FtpError> {
-        let from_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), from);
-        let to_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), to);
+        let from_path = self.full_path(from);
+        let to_path = self.full_path(to);
         self.sftp.rename(Path::new(&from_path), Path::new(&to_path), None).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -263,7 +270,7 @@ impl FileTransferClient for SftpClient {
     }
 
     fn rm(&mut self, filename: &str) -> Result<(), FtpError> {
-        let full_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), filename);
+        let full_path = self.full_path(filename);
         self.sftp.unlink(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
