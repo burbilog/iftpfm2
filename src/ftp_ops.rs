@@ -464,7 +464,7 @@ pub fn transfer_files(
                 format!("ERROR: Invalid regex pattern '{}': {}", config.filename_regexp, e),
                 Some(thread_id),
             );
-            return 1;
+            return 0; // Non-fatal config error, not a crash
         }
     };
 
