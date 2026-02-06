@@ -21,9 +21,11 @@ test:
 	./test.sh
 	./test_age.sh
 	./test_conn_timeout.sh
+	./test_sftp_timeout.sh
 	./test_ftps.sh
 	./test_temp_dir.sh
 	./test_pid.sh
+	./test_ram_threshold.sh
 
 # run SFTP tests with Docker (separate target, not included in main test target)
 test-sftp:

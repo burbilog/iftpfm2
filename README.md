@@ -260,6 +260,7 @@ This runs:
 - Basic FTP transfer test (`test.sh`)
 - File age filtering test (`test_age.sh`)
 - Connection timeout test (`test_conn_timeout.sh`)
+- SFTP connection timeout test (`test_sftp_timeout.sh`)
 - FTPS with self-signed certificates test (`test_ftps.sh`)
 - Temp directory test (`test_temp_dir.sh`)
 - PID handling test (`test_pid.sh`)

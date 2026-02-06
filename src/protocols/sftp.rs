@@ -81,6 +81,9 @@ impl FileTransferClient for SftpClient {
                 ))
             })?;
 
+            // Set timeout for SSH session operations (blocks operations if no data received)
+            session.set_timeout(timeout.as_millis() as u32);
+
             // Authenticate - either password or keyfile
             let auth_result = match (password, keyfile_path) {
                 (Some(pwd), _) => {

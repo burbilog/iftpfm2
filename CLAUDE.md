@@ -21,7 +21,7 @@ make install
 # Run all tests (unit + integration)
 make test
 # or manually:
-cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh && ./test_pid.sh && ./test_ram_threshold.sh
+cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_sftp_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh && ./test_pid.sh && ./test_ram_threshold.sh
 
 # Run only unit tests
 cargo test --lib
@@ -45,6 +45,10 @@ cargo doc --open
   - Creates temp files and verifies transfer behavior
 - `test_age.sh` - File age filtering test
 - `test_conn_timeout.sh` - Connection timeout test
+- `test_sftp_timeout.sh` - SFTP connection timeout test
+  - Tests `-t` flag for SFTP connections
+  - Verifies timeout works at TCP and SSH session levels
+  - Uses non-routable IP to trigger timeout
 - `test_ftps.sh` - FTPS with self-signed certificates test
   - Generates self-signed certificate using openssl
   - Tests with and without `--insecure-skip-verify` flag
@@ -197,7 +201,7 @@ cargo doc --open
 - `test_pid.sh` - Tests PID file creation and nix-based signaling
 - SFTP tests: `make test-sftp` (separate target, uses Docker atmoz/sftp container)
 - **Run all tests (unit + integration):** `make test` in the project root directory
-  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, and `./test_pid.sh`
+  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_sftp_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, `./test_pid.sh`, and `./test_ram_threshold.sh`
   - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
 
 **Connection Timeout:**
