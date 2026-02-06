@@ -2,6 +2,15 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.6] - 2026-02-06
+
+### Fixed
+- **test_pid.sh readonly variable error** - use `CURRENT_UID` instead of `UID`
+  - `UID` is a built-in readonly variable in some bash versions
+  - Caused test failure on production systems with error "UID: readonly variable"
+
+---
+
 ## [2.4.5] - 2026-02-06
 
 ### Fixed
