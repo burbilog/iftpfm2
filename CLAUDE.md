@@ -21,7 +21,7 @@ make install
 # Run all tests (unit + integration)
 make test
 # or manually:
-cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh && ./test_pid.sh
+cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh && ./test_pid.sh && ./test_ram_threshold.sh
 
 # Run only unit tests
 cargo test --lib
@@ -56,6 +56,11 @@ cargo doc --open
   - Tests PID file creation with correct PID
   - Verifies no `lsof` dependency (binary doesn't contain "lsof" string)
   - Tests graceful termination via SIGTERM
+- `test_ram_threshold.sh` - RAM threshold test
+  - Tests `--ram-threshold` flag behavior
+  - Verifies RAM buffer usage for small files
+  - Verifies disk temp file usage for large files
+  - Tests `--ram-threshold 0` forces all files to RAM
 - `test_sftp_docker.sh` - SFTP test (separate `make test-sftp` target)
   - Prerequisites: Docker with `atmoz/sftp` container
   - Starts two SFTP servers on ports 3222/3223
@@ -122,10 +127,13 @@ cargo doc --open
    - Check regex match
    - Get MDTM (modified time)
    - Check file age
-   - Transfer via `retr()` → temp file on disk → `put_file()` from temp file
-     - Uses `tempfile::NamedTempFile` for automatic cleanup
+   - Get file size via SIZE command to determine storage strategy
+   - Transfer via `retr()` → RAM buffer or disk temp file → `put_file()`
+     - Files ≤ `--ram-threshold` (default: 10MB) use RAM buffer (Vec<u8>)
+     - Files > `--ram-threshold` use disk temp file (NamedTempFile)
+     - `--ram-threshold 0` forces all files to RAM buffer
      - Temp directory: `-T <dir>` flag (default: system temp dir)
-     - Debug mode (`--debug`) logs temp file paths
+     - Debug mode (`--debug`) logs storage decision and temp file paths
    - Verify upload size (MANDATORY - transfer fails if verification fails)
    - Rename temporary file to final name (retry after deleting existing file if rename fails)
    - Verify final file size using `verify_final_file()` (MANDATORY)
@@ -236,4 +244,12 @@ cargo doc --open
 | `-t` | `<seconds>` | Connection timeout in seconds (default: 30) |
 | `-T` | `<dir>` | Directory for temporary files (default: system temp) |
 | `--debug` | - | Enable debug logging (shows temp file paths, etc.) |
+| `--ram-threshold` | `<bytes>` | RAM threshold for temp files (default: 10485760) |
 | `--insecure-skip-verify` | - | Skip TLS certificate verification for FTPS (DANGEROUS) |
+
+**RAM Threshold Behavior (`--ram-threshold`):**
+- Default: 10485760 (10MB) - balances speed and memory safety
+- Files smaller than threshold use RAM buffer (faster, no disk I/O)
+- Files larger than threshold use disk temp files (avoids OOM)
+- `--ram-threshold 0` forces ALL files to RAM buffer (use with caution!)
+- Debug logging shows decision: "Using RAM buffer" or "Using disk buffer"

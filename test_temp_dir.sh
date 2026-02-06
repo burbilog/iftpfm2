@@ -33,7 +33,8 @@ python3 -m pyftpdlib -p 2122 -u u2 -P p2 -d /tmp/ftp2 -w 2>/dev/null &
 ftp2_pid=$!
 
 echo "Generating test file"
-echo "temp_test_content" > /tmp/ftp1/test_temp.txt
+# Create a file larger than default RAM threshold (10MB) to force disk usage
+dd if=/dev/zero of=/tmp/ftp1/test_temp.txt bs=1024 count=11264 2>/dev/null  # ~11.5MB
 touch -d '10 seconds ago' /tmp/ftp1/test_temp.txt
 
 echo "Creating config file"

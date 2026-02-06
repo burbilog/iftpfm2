@@ -3,8 +3,58 @@ use crate::logging::{log_debug, log_with_thread};
 use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
 use regex::Regex;
+use std::io::{Cursor, Read, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
+
+/// Default RAM threshold for temp files (10MB)
+/// Files below this size use RAM buffer, larger files use disk
+const DEFAULT_RAM_THRESHOLD: u64 = 10 * 1024 * 1024;
+
+/// Transfer buffer storage strategy
+/// Encapsulates either RAM (Vec<u8>) or disk (NamedTempFile) storage
+enum TransferBuffer {
+    Ram(Vec<u8>),
+    Disk(NamedTempFile),
+}
+
+impl TransferBuffer {
+    /// Get the size of the buffer in bytes
+    fn size(&self) -> u64 {
+        match self {
+            TransferBuffer::Ram(vec) => vec.len() as u64,
+            TransferBuffer::Disk(temp_file) => temp_file
+                .as_file()
+                .metadata()
+                .map(|m| m.len())
+                .unwrap_or(0),
+        }
+    }
+
+    /// Create a reader for the buffer
+    /// Returns Box<dyn Read> for unified interface
+    fn into_reader(self) -> Box<dyn Read + Send> {
+        match self {
+            TransferBuffer::Ram(vec) => Box::new(Cursor::new(vec)),
+            TransferBuffer::Disk(temp_file) => {
+                // reopen() creates a new handle to the same file
+                match temp_file.reopen() {
+                    Ok(reader) => Box::new(reader),
+                    Err(_) => {
+                        // Fallback: try to read from the original file path
+                        // This shouldn't happen in practice as NamedTempFile persists until dropped
+                        Box::new(std::fs::File::open(temp_file.path()).unwrap_or_else(|_| {
+                            std::io::stderr()
+                                .write_all(b"Critical error: failed to open temp file\n")
+                                .ok();
+                            std::process::exit(1);
+                        }))
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// Verify final file size after rename
 ///
@@ -68,7 +118,7 @@ fn verify_final_file(
 ///
 /// # Example
 /// ```text
-/// // let count = transfer_files(&config, true, 1, None, false, None);
+/// // let count = transfer_files(&config, true, 1, None, false, None, None);
 /// ```
 pub fn transfer_files(
     config: &Config,
@@ -77,6 +127,7 @@ pub fn transfer_files(
     connect_timeout: Option<u64>,
     insecure_skip_verify: bool,
     temp_dir: Option<&str>,
+    ram_threshold: Option<u64>,
 ) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
@@ -351,64 +402,93 @@ pub fn transfer_files(
             continue;
         }
 
+        // Get file size BEFORE downloading to determine storage strategy
+        let file_size = match ftp_from.size(filename.as_str()) {
+            Ok(size) => size,
+            Err(e) => {
+                let _ = log_with_thread(
+                    format!(
+                        "Error getting size for file '{}': {}, skipping",
+                        filename,
+                        e.to_string().replace("\n", "")
+                    ),
+                    Some(thread_id),
+                );
+                continue;
+            }
+        };
+
+        // Determine actual threshold (default: 10MB)
+        let actual_threshold = ram_threshold.unwrap_or(DEFAULT_RAM_THRESHOLD);
+
+        // Determine storage method: RAM or disk
+        // file_size is usize from SIZE command, actual_threshold is u64
+        let use_ram = if actual_threshold == 0 {
+            true // Force RAM for all files when threshold is 0
+        } else {
+            file_size as u64 <= actual_threshold
+        };
+
+        // Log the storage decision
+        let storage = if use_ram { "RAM" } else { "disk" };
+        let _ = log_with_thread(
+            format!(
+                "Using {} buffer for {} ({} bytes, threshold: {})",
+                storage, filename, file_size, actual_threshold
+            ),
+            Some(thread_id),
+        );
+
         // Use temporary filename for atomic transfer: .filename.{PID}.tmp
         let tmp_filename = format!(".{}.{}.tmp", filename, std::process::id());
 
-        // Transfer to temporary file first for atomicity
-        // FileTransferClient uses retr() with a reader callback for download
-        // TODO: calculate hash for future --verify-redownload option
-        //        (download file back from target and compare hashes)
+        // Transfer with conditional storage (RAM or disk)
         let transfer_result = ftp_from.retr(filename.as_str(), |stream| {
-            let mut temp_file = match temp_dir {
-                Some(dir) => NamedTempFile::new_in(dir)
-                    .map_err(|e| suppaftp::FtpError::ConnectionError(
-                        std::io::Error::new(std::io::ErrorKind::Other, format!("tempfile create in {}: {}", dir, e))
-                    ))?,
-                None => NamedTempFile::new()
-                    .map_err(|e| suppaftp::FtpError::ConnectionError(
-                        std::io::Error::new(std::io::ErrorKind::Other, format!("tempfile create: {}", e))
-                    ))?,
-            };
-            // Log temp file path in debug mode
-            let _ = log_debug(
-                format!("Using temp file: {}", temp_file.path().display()),
-                Some(thread_id),
-            );
-            std::io::copy(stream, &mut temp_file)
-                .map_err(suppaftp::FtpError::ConnectionError)?;
-            Ok(temp_file)
+            if use_ram {
+                // RAM path: Vec<u8> buffer
+                let mut buffer = Vec::with_capacity(file_size as usize);
+                std::io::copy(stream, &mut buffer)
+                    .map_err(suppaftp::FtpError::ConnectionError)?;
+                Ok(TransferBuffer::Ram(buffer))
+            } else {
+                // Disk path: NamedTempFile
+                let mut temp_file = match temp_dir {
+                    Some(dir) => NamedTempFile::new_in(dir).map_err(|e| {
+                        suppaftp::FtpError::ConnectionError(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("tempfile create in {}: {}", dir, e),
+                        ))
+                    })?,
+                    None => NamedTempFile::new().map_err(|e| {
+                        suppaftp::FtpError::ConnectionError(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("tempfile create: {}", e),
+                        ))
+                    })?,
+                };
+                // Log temp file path in debug mode
+                let _ = log_debug(
+                    format!("Using temp file: {}", temp_file.path().display()),
+                    Some(thread_id),
+                );
+                std::io::copy(stream, &mut temp_file)
+                    .map_err(suppaftp::FtpError::ConnectionError)?;
+                Ok(TransferBuffer::Disk(temp_file))
+            }
         });
 
         match transfer_result {
-            Ok(temp_file) => {
-                // Get file size from the temporary file
-                let file_size = temp_file
-                    .as_file()
-                    .metadata()
-                    .map(|m| m.len())
-                    .unwrap_or_else(|e| {
-                        let _ = log_with_thread(
-                            format!("Failed to get temp file metadata: {}", e),
-                            Some(thread_id),
-                        );
-                        0
-                    });
+            Ok(buffer) => {
+                let file_size = buffer.size();
                 let file_size = usize::try_from(file_size).unwrap_or(usize::MAX);
                 let _ = log_with_thread(
                     format!("Uploading file {} ({} bytes)", filename, file_size),
                     Some(thread_id),
                 );
+
                 // Upload the data to target server using put_file() with a reader
-                let mut reader = match temp_file.reopen() {
-                    Ok(r) => r,
-                    Err(e) => {
-                        let _ = log_with_thread(
-                            format!("Failed to reopen temp file: {}", e),
-                            Some(thread_id),
-                        );
-                        continue;
-                    }
-                };
+                // TransferBuffer::into_reader() returns Box<dyn Read + Send>
+                let mut reader = buffer.into_reader();
                 match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
                     Ok(bytes_written) => {
                         let _ = log_with_thread(
@@ -660,7 +740,7 @@ mod tests {
             filename_regexp: ".*".to_string(),
         };
 
-        let result = transfer_files(&config, false, 1, None, false, None);
+        let result = transfer_files(&config, false, 1, None, false, None, None);
         assert_eq!(
             result, 0,
             "Should return 0 when shutdown requested before start"

@@ -166,6 +166,7 @@ You can also use the following options:
     -t seconds: Connection timeout in seconds (default: 30)
     -T dir: Directory for temporary files (default: system temp directory)
     --debug: Enable debug logging (shows temp file paths, etc.)
+    --ram-threshold bytes: RAM threshold for temp files (default: 10485760)
     --insecure-skip-verify: Skip TLS certificate verification for FTPS connections (use with caution)
 
 Single Instance Behavior:
@@ -192,9 +193,13 @@ Logging Features:
 Temporary Files:
 - Files are downloaded to temporary storage during transfer
 - Use -T flag to specify custom temp directory (useful for SSD/fast storage)
+- Use --ram-threshold to control RAM vs disk storage (default: 10MB)
+  - Files smaller than threshold use RAM buffer (faster, no disk I/O)
+  - Files larger than threshold use disk temp files (avoids OOM)
+  - --ram-threshold 0 forces all files to RAM (use with caution)
 - Default: system temp directory (/tmp on Unix, %TEMP% on Windows)
 - Temp files are automatically cleaned up after transfer
-- Debug mode shows exact temp file paths for troubleshooting
+- Debug mode shows exact temp file paths and storage strategy for troubleshooting
 
 Examples
 ========
@@ -258,6 +263,7 @@ This runs:
 - FTPS with self-signed certificates test (`test_ftps.sh`)
 - Temp directory test (`test_temp_dir.sh`)
 - PID handling test (`test_pid.sh`)
+- RAM threshold test (`test_ram_threshold.sh`)
 
 To run SFTP tests (requires Docker):
 

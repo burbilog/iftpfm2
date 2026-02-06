@@ -2,6 +2,32 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.3] - 2026-02-06
+
+### Added
+- **`--ram-threshold <bytes>` flag** - configurable threshold for RAM vs disk temporary storage
+  - Files smaller than threshold (default: 10MB) are transferred via RAM buffer for faster I/O
+  - Files larger than threshold use disk temporary files to avoid OOM
+  - `--ram-threshold 0` forces all files to use RAM buffer (use with caution)
+  - Optimal default (10MB) balances speed and memory safety for most workloads
+  - Resolves codereview.md issue #2 (Enhancement)
+
+### Changed
+- `transfer_files()` signature now includes `ram_threshold: Option<u64>` parameter
+- File size is retrieved via FTP/SFTP SIZE command before download to determine storage strategy
+- New `TransferBuffer` enum encapsulates RAM (`Vec<u8>`) or disk (`NamedTempFile`) storage
+- Debug logging shows storage decision: "Using RAM buffer" or "Using disk buffer"
+
+### Fixed
+- **I/O overhead for many small files** - small files no longer create unnecessary disk temp files
+- `test_temp_dir.sh` now uses 11.5MB test file to properly verify disk temp file behavior
+
+### Tested
+- `test_ram_threshold.sh` integration test verifies RAM/disk storage decisions
+- All existing integration tests pass (test.sh, test_age.sh, test_conn_timeout.sh, test_ftps.sh, test_temp_dir.sh, test_pid.sh)
+
+---
+
 ## [2.4.2] - 2026-02-06
 
 ### Fixed

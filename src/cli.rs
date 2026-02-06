@@ -15,6 +15,7 @@ pub struct CliArgs {
     pub insecure_skip_verify: bool,
     pub temp_dir: Option<String>,
     pub debug: bool,
+    pub ram_threshold: Option<u64>, // None = 10MB default, Some(0) = all RAM
 }
 
 /// Prints usage instructions for the program.
@@ -36,6 +37,9 @@ Options:
   -t <seconds>       Connection timeout in seconds (default: 30)
   -T <dir>           Directory for temporary files (default: system temp dir)
   --debug            Enable debug logging (shows temp file paths, etc.)
+  --ram-threshold <bytes>
+                     RAM threshold for temp files (default: 10485760)
+                     Files below this size use RAM, larger use disk
   --insecure-skip-verify
                      Skip TLS certificate verification for FTPS (DANGEROUS)
 
@@ -71,6 +75,7 @@ pub fn parse_args() -> CliArgs {
     let mut insecure_skip_verify = false; // Default: verify certificates
     let mut temp_dir = None; // Default: use system temp directory
     let mut debug = false; // Default: no debug logging
+    let mut ram_threshold: Option<u64> = None;
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -157,6 +162,23 @@ pub fn parse_args() -> CliArgs {
                     process::exit(1);
                 }));
             }
+            "--ram-threshold" => {
+                ram_threshold = match args.next() {
+                    Some(arg) => match arg.parse::<u64>() {
+                        Ok(n) => Some(n),
+                        _ => {
+                            eprintln!("Error: RAM threshold must be a non-negative number");
+                            print_usage();
+                            process::exit(1);
+                        }
+                    },
+                    None => {
+                        eprintln!("Error: Missing RAM threshold argument");
+                        print_usage();
+                        process::exit(1);
+                    }
+                }
+            }
             _ => {
                 if config_file.is_none() {
                     config_file = Some(arg);
@@ -194,5 +216,6 @@ pub fn parse_args() -> CliArgs {
         insecure_skip_verify,
         temp_dir,
         debug,
+        ram_threshold,
     }
 }
