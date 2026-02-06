@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::{Config, Protocol};
 use crate::logging::{log_debug, log_with_thread};
 use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
@@ -10,6 +10,150 @@ use tempfile::NamedTempFile;
 /// Default RAM threshold for temp files (10MB)
 /// Files below this size use RAM buffer, larger files use disk
 const DEFAULT_RAM_THRESHOLD: u64 = 10 * 1024 * 1024;
+
+/// Connect to FTP/FTPS/SFTP server, login, and change directory
+///
+/// Returns Ok(client) on success, Err(error_message) on failure
+/// The error message is already formatted for logging
+fn connect_and_login(
+    proto: &Protocol,
+    host: &str,
+    port: u16,
+    login: &str,
+    password: Option<&str>,
+    keyfile: Option<&str>,
+    path: &str,
+    timeout: Duration,
+    insecure_skip_verify: bool,
+    server_type: &str, // "SOURCE" or "TARGET" for logging
+) -> Result<Client, String> {
+    let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password, keyfile) {
+        Ok(c) => c,
+        Err(e) => {
+            return Err(format!(
+                "Error connecting to {} FTP server {}:{} ({}s timeout): {}",
+                server_type, host, port, timeout.as_secs(), e
+            ));
+        }
+    };
+
+    if let Err(e) = client.login(login, password.unwrap_or("")) {
+        let _ = client.quit();
+        return Err(format!(
+            "Error logging into {} FTP server {}: {}",
+            server_type, host, e
+        ));
+    }
+
+    if let Err(e) = client.cwd(path) {
+        let _ = client.quit();
+        return Err(format!(
+            "Error changing directory on {} FTP server {} (user '{}', path '{}'): {}",
+            server_type, host, login, path, e
+        ));
+    }
+
+    Ok(client)
+}
+
+/// Check if file should be transferred based on age and regex
+///
+/// Returns Some(file_size) if file should be transferred, None if should skip
+fn check_file_should_transfer(
+    client: &mut Client,
+    filename: &str,
+    min_age_seconds: u64,
+    regex: &Regex,
+    thread_id: usize,
+) -> Option<usize> {
+    // Check regex match
+    if !regex.is_match(filename) {
+        let _ = log_with_thread(
+            format!(
+                "Skipping file {} as it did not match regex {}",
+                filename, regex
+            ),
+            Some(thread_id),
+        );
+        return None;
+    }
+
+    // Get file modification time
+    let datetime_naive = match client.mdtm(filename) {
+        Ok(dt) => dt,
+        Err(e) => {
+            let _ = log_with_thread(
+                format!(
+                    "Error getting modified time for file '{}': {}, skipping",
+                    filename,
+                    e.to_string().replace("\n", "")
+                ),
+                Some(thread_id),
+            );
+            return None;
+        }
+    };
+
+    // Convert to SystemTime for age calculation
+    let modified_system_time = {
+        let secs = datetime_naive.and_utc().timestamp();
+        let nanos = datetime_naive.and_utc().timestamp_subsec_nanos();
+        if secs < 0 {
+            let _ = log_with_thread(
+                format!(
+                    "File '{}' has a pre-epoch modification time ({}), skipping",
+                    filename, datetime_naive
+                ),
+                Some(thread_id),
+            );
+            return None;
+        }
+        UNIX_EPOCH + Duration::new(secs as u64, nanos)
+    };
+
+    // Calculate file age
+    let file_age_seconds = match SystemTime::now().duration_since(modified_system_time) {
+        Ok(duration) => duration.as_secs(),
+        Err(_) => {
+            let _ = log_with_thread(
+                format!(
+                    "File '{}' has a modification time in the future ({} vs now), skipping",
+                    filename, datetime_naive
+                ),
+                Some(thread_id),
+            );
+            return None;
+        }
+    };
+
+    // Check age threshold
+    if file_age_seconds < min_age_seconds {
+        let _ = log_with_thread(
+            format!(
+                "Skipping file {}, it is {} seconds old, less than specified age {} seconds",
+                filename, file_age_seconds, min_age_seconds
+            ),
+            Some(thread_id),
+        );
+        return None;
+    }
+
+    // Get file size
+    match client.size(filename) {
+        Ok(size) => Some(size),
+        Err(e) => {
+            let _ = log_with_thread(
+                format!(
+                    "Error getting size for file '{}': {}, skipping",
+                    filename,
+                    e.to_string().replace("\n", "")
+                ),
+                Some(thread_id),
+            );
+            None
+        }
+    }
+}
 
 /// Transfer buffer storage strategy
 /// Encapsulates either RAM (Vec<u8>) or disk (NamedTempFile) storage
@@ -196,119 +340,46 @@ pub fn transfer_files(
 
     let timeout = Duration::from_secs(connect_timeout.unwrap_or(30));
 
-    // Connect to the source FTP server
-    let mut ftp_from = match Client::connect(
+    // Connect to source server
+    let mut ftp_from = match connect_and_login(
         &config.proto_from,
         &config.ip_address_from,
         config.port_from,
-        timeout,
-        insecure_skip_verify,
         &config.login_from,
         config.password_from.as_deref(),
         config.keyfile_from.as_deref(),
+        &config.path_from,
+        timeout,
+        insecure_skip_verify,
+        "SOURCE",
     ) {
-        Ok(stream) => stream,
+        Ok(client) => client,
         Err(e) => {
-            let _ = log_with_thread(
-                format!(
-                    "Error connecting to SOURCE FTP server {}:{} ({}s timeout): {}",
-                    config.ip_address_from,
-                    config.port_from,
-                    connect_timeout.unwrap_or(30),
-                    e
-                ),
-                Some(thread_id),
-            );
+            let _ = log_with_thread(e, Some(thread_id));
             return 0;
         }
     };
 
-    if let Err(e) = ftp_from.login(
-        config.login_from.as_str(),
-        config.password_from.as_deref().unwrap_or(""),
-    ) {
-        let _ = log_with_thread(
-            format!(
-                "Error logging into SOURCE FTP server {}: {}",
-                config.ip_address_from, e
-            ),
-            Some(thread_id),
-        );
-        let _ = ftp_from.quit();
-        return 0;
-    }
-    if let Err(e) = ftp_from.cwd(config.path_from.as_str()) {
-        let _ = log_with_thread(
-            format!(
-                "Error changing directory on SOURCE FTP server {} (user '{}', path '{}'): {}",
-                config.ip_address_from, config.login_from, config.path_from, e
-            ),
-            Some(thread_id),
-        );
-        let _ = ftp_from.quit();
-        return 0;
-    }
-
-    // Connect to the target FTP server
-    let mut ftp_to = match Client::connect(
+    // Connect to target server
+    let mut ftp_to = match connect_and_login(
         &config.proto_to,
         &config.ip_address_to,
         config.port_to,
-        timeout,
-        insecure_skip_verify,
         &config.login_to,
         config.password_to.as_deref(),
         config.keyfile_to.as_deref(),
+        &config.path_to,
+        timeout,
+        insecure_skip_verify,
+        "TARGET",
     ) {
-        Ok(stream) => stream,
+        Ok(client) => client,
         Err(e) => {
-            let _ = log_with_thread(
-                format!(
-                    "Error connecting to TARGET FTP server {}:{} ({}s timeout): {}",
-                    config.ip_address_to,
-                    config.port_to,
-                    connect_timeout.unwrap_or(30),
-                    e
-                ),
-                Some(thread_id),
-            );
+            let _ = log_with_thread(e, Some(thread_id));
             let _ = ftp_from.quit();
             return 0;
         }
     };
-
-    if let Err(e) = ftp_to.login(
-        config.login_to.as_str(),
-        config.password_to.as_deref().unwrap_or(""),
-    ) {
-        let _ = log_with_thread(
-            format!(
-                "Error logging into TARGET FTP server {}: {}",
-                config.ip_address_to, e
-            ),
-            Some(thread_id),
-        );
-        let _ = ftp_to.quit();
-        let _ = ftp_from.quit();
-        return 0;
-    }
-
-    let _ = log_with_thread(
-        format!("TARGET {} login successful", config.proto_to),
-        Some(thread_id),
-    );
-    if let Err(e) = ftp_to.cwd(config.path_to.as_str()) {
-        let _ = log_with_thread(
-            format!(
-                "Error changing directory on TARGET FTP server {} (user '{}', path '{}'): {}",
-                config.ip_address_to, config.login_to, config.path_to, e
-            ),
-            Some(thread_id),
-        );
-        let _ = ftp_to.quit();
-        let _ = ftp_from.quit();
-        return 0;
-    }
 
     // Set binary mode once for both connections (outside the file loop)
     use crate::protocols::TransferMode;
@@ -373,91 +444,15 @@ pub fn transfer_files(
             break;
         }
 
-        if !regex.is_match(&filename) {
-            let _ = log_with_thread(
-                format!(
-                    "Skipping file {} as it did not match regex {}",
-                    filename, regex
-                ),
-                Some(thread_id),
-            );
+        // Check if file should be transferred (regex, age, size)
+        let Some(file_size) = check_file_should_transfer(
+            &mut ftp_from,
+            &filename,
+            config.age,
+            &regex,
+            thread_id,
+        ) else {
             continue;
-        }
-
-        // Get the modified time of the file on the FTP server.
-        // FileTransferClient::mdtm returns Result<chrono::NaiveDateTime, FtpError>
-        let datetime_naive = match ftp_from.mdtm(filename.as_str()) {
-            Ok(dt) => dt,
-            Err(e) => {
-                let _ = log_with_thread(
-                    format!(
-                        "Error getting modified time for file '{}': {}, skipping",
-                        filename,
-                        e.to_string().replace("\n", "")
-                    ),
-                    Some(thread_id),
-                );
-                continue;
-            }
-        };
-
-        // Convert NaiveDateTime to SystemTime for age calculation.
-        // NaiveDateTime has no timezone, so we assume it's UTC for MDTM purposes.
-        let modified_system_time = {
-            let secs = datetime_naive.and_utc().timestamp();
-            let nanos = datetime_naive.and_utc().timestamp_subsec_nanos();
-            if secs < 0 {
-                let _ = log_with_thread(
-                    format!(
-                        "File '{}' has a pre-epoch modification time ({}), skipping",
-                        filename, datetime_naive
-                    ),
-                    Some(thread_id),
-                );
-                continue;
-            }
-            UNIX_EPOCH + Duration::new(secs as u64, nanos)
-        };
-
-        let file_age_seconds = match SystemTime::now().duration_since(modified_system_time) {
-            Ok(duration) => duration.as_secs(),
-            Err(_) => {
-                let _ = log_with_thread(
-                    format!(
-                        "File '{}' has a modification time in the future ({} vs now), skipping",
-                        filename, datetime_naive
-                    ),
-                    Some(thread_id),
-                );
-                continue;
-            }
-        };
-
-        if file_age_seconds < config.age {
-            let _ = log_with_thread(
-                format!(
-                    "Skipping file {}, it is {} seconds old, less than specified age {} seconds",
-                    filename, file_age_seconds, config.age
-                ),
-                Some(thread_id),
-            );
-            continue;
-        }
-
-        // Get file size BEFORE downloading to determine storage strategy
-        let file_size = match ftp_from.size(filename.as_str()) {
-            Ok(size) => size,
-            Err(e) => {
-                let _ = log_with_thread(
-                    format!(
-                        "Error getting size for file '{}': {}, skipping",
-                        filename,
-                        e.to_string().replace("\n", "")
-                    ),
-                    Some(thread_id),
-                );
-                continue;
-            }
         };
 
         // Determine actual threshold (default: 10MB)
