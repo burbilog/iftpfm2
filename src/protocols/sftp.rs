@@ -11,11 +11,25 @@ use std::time::Duration;
 use ssh2::{Session, Sftp};
 use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
 
+/// Authentication method for SFTP connections
+///
+/// Stores the authentication credentials to be used during login.
+/// This allows us to defer authentication from connect() to login()
+/// for consistency with FTP/FTPS protocols.
+enum AuthMethod {
+    /// Password authentication
+    Password(String),
+    /// Keyfile authentication with optional passphrase
+    Keyfile { path: String, passphrase: Option<String> },
+}
+
 /// SFTP client for SSH File Transfer Protocol connections
 pub struct SftpClient {
     _session: Session,
     sftp: Sftp,
     current_dir: String,
+    /// Authentication method to use during login
+    auth_method: AuthMethod,
 }
 
 impl SftpClient {
@@ -31,7 +45,7 @@ impl FileTransferClient for SftpClient {
         port: u16,
         timeout: Duration,
         _config: &ProtocolConfig,
-        user: &str,
+        _user: &str,
         password: Option<&str>,
         keyfile_path: Option<&str>,
         keyfile_passphrase: Option<&str>,
@@ -39,6 +53,22 @@ impl FileTransferClient for SftpClient {
     where
         Self: Sized,
     {
+        // Determine authentication method (validation should have happened during config parsing)
+        let auth_method = match (password, keyfile_path) {
+            (Some(pwd), _) => AuthMethod::Password(pwd.to_string()),
+            (None, Some(keyfile)) => AuthMethod::Keyfile {
+                path: keyfile.to_string(),
+                passphrase: keyfile_passphrase.map(|s| s.to_string()),
+            },
+            (None, None) => {
+                // This should have been validated during config parsing
+                return Err(FtpError::ConnectionError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "SFTP requires either password or keyfile",
+                )));
+            }
+        };
+
         // Resolve host to all possible addresses
         let addrs: Vec<std::net::SocketAddr> = (host, port)
             .to_socket_addrs()
@@ -92,32 +122,6 @@ impl FileTransferClient for SftpClient {
             // Set timeout for SSH session operations (blocks operations if no data received)
             session.set_timeout(timeout.as_millis() as u32);
 
-            // Authenticate - either password or keyfile
-            let auth_result = match (password, keyfile_path) {
-                (Some(pwd), _) => {
-                    // Password authentication
-                    session.userauth_password(user, pwd)
-                }
-                (None, Some(keyfile)) => {
-                    // Keyfile authentication (with optional passphrase)
-                    session.userauth_pubkey_file(user, None, Path::new(keyfile), keyfile_passphrase)
-                }
-                (None, None) => {
-                    // This should have been validated during config parsing
-                    return Err(FtpError::ConnectionError(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "SFTP requires either password or keyfile",
-                    )));
-                }
-            };
-
-            auth_result.map_err(|e| {
-                FtpError::ConnectionError(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    format!("SFTP authentication failed for user '{}': {}", user, e),
-                ))
-            })?;
-
             // Create SFTP channel
             let sftp = session.sftp().map_err(|e| {
                 FtpError::ConnectionError(std::io::Error::new(
@@ -130,6 +134,7 @@ impl FileTransferClient for SftpClient {
                 _session: session,
                 sftp,
                 current_dir: String::from("/"),
+                auth_method,
             });
         }
 
@@ -141,9 +146,32 @@ impl FileTransferClient for SftpClient {
         }))
     }
 
-    fn login(&mut self, _user: &str, _password: &str) -> Result<(), FtpError> {
-        // No-op: authentication already happened in connect()
-        Ok(())
+    fn login(&mut self, user: &str, _password: &str) -> Result<(), FtpError> {
+        // Perform authentication using the stored auth_method
+        // Note: _password parameter is ignored for SFTP since we store the credentials
+        // in auth_method during connect(). This maintains API compatibility with FTP/FTPS.
+        let auth_result = match &self.auth_method {
+            AuthMethod::Password(pwd) => {
+                // Password authentication
+                self._session.userauth_password(user, pwd)
+            }
+            AuthMethod::Keyfile { path, passphrase } => {
+                // Keyfile authentication (with optional passphrase)
+                self._session.userauth_pubkey_file(
+                    user,
+                    None,
+                    Path::new(path),
+                    passphrase.as_deref(),
+                )
+            }
+        };
+
+        auth_result.map_err(|e| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("SFTP authentication failed for user '{}': {}", user, e),
+            ))
+        })
     }
 
     fn cwd(&mut self, path: &str) -> Result<(), FtpError> {

@@ -34,16 +34,6 @@ fn connect_and_login(
     // For SFTP with keyfile, password can be None
     let _ = log_with_thread(format!("[{}] Connecting to {}:{}...", proto, host, port), Some(thread_id));
 
-    let password_for_login = match proto {
-        Protocol::Sftp if keyfile.is_some() => password.map(|s| s.as_str()).unwrap_or(""),
-        _ => password.map(|s| s.as_str()).ok_or_else(|| {
-            format!(
-                "BUG: Password required for {} but was None (should have been caught during config validation)",
-                proto
-            )
-        })?,
-    };
-
     let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password.map(|s| s.as_str()), keyfile, keyfile_passphrase) {
         Ok(c) => {
             let _ = log_with_thread(format!("[{}] Connected successfully", proto), Some(thread_id));
@@ -57,7 +47,19 @@ fn connect_and_login(
         }
     };
 
-    if let Err(e) = client.login(login, password_for_login) {
+    // For FTP/FTPS: password is required
+    // For SFTP: password may be None when using keyfile auth (login() will use stored credentials)
+    let pwd = match proto {
+        Protocol::Sftp if keyfile.is_some() => "",
+        _ => password.map(|s| s.as_str()).ok_or_else(|| {
+            format!(
+                "BUG: Password required for {} but was None (should have been caught during config validation)",
+                proto
+            )
+        })?,
+    };
+
+    if let Err(e) = client.login(login, pwd) {
         let _ = client.quit();
         return Err(format!(
             "Error logging into {} FTP server {}: {}",
