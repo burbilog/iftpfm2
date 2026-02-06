@@ -139,13 +139,13 @@ Where:
 - `keyfile_to`: Destination SSH private key path (string, optional for SFTP key auth)
 - `path_to`: Destination directory path (string)
 - `proto_to`: Destination protocol - "ftp", "ftps", or "sftp" (optional, default: "ftp")
-- `age`: Minimum file age to transfer (seconds, number)
+- `age`: Minimum file age to transfer (seconds, number) - use `0` to disable age checking and transfer all files immediately
 - `filename_regexp`: Regular expression pattern to match files (string)
 
 File filtering behavior:
 - All files in the literal source path are retrieved via FTP NLST command
 - Files are then filtered by:
-  - Minimum age (specified in config file)
+  - Minimum age (specified in config file) - when `age` is `0`, all files pass age check
   - Regular expression pattern (specified per server in config file)
 
 Once you have created the configuration file, you can run iftpfm2 with the following command:
