@@ -115,6 +115,20 @@ impl From<TransferMode> for suppaftp::types::FileType {
     }
 }
 
+/// Macro to delegate method calls to enum variants
+///
+/// This reduces boilerplate by generating match expressions that delegate
+/// to the appropriate client type (Ftp, Ftps, or Sftp).
+macro_rules! delegate {
+    ($self:expr, $method:ident $(, $arg:expr)* $(,)?) => {
+        match $self {
+            Client::Ftp(client) => client.$method($($arg),*),
+            Client::Ftps(client) => client.$method($($arg),*),
+            Client::Sftp(client) => client.$method($($arg),*),
+        }
+    };
+}
+
 /// Enum wrapper for FTP/FTPS/SFTP clients
 ///
 /// Since `FileTransferClient` has generic methods, it cannot be used as
@@ -151,56 +165,32 @@ impl Client {
 
     /// Authenticate with username and password
     pub fn login(&mut self, user: &str, password: &str) -> Result<(), FtpError> {
-        match self {
-            Client::Ftp(client) => client.login(user, password),
-            Client::Ftps(client) => client.login(user, password),
-            Client::Sftp(client) => client.login(user, password),
-        }
+        delegate!(self, login, user, password)
     }
 
     /// Change working directory
     pub fn cwd(&mut self, path: &str) -> Result<(), FtpError> {
-        match self {
-            Client::Ftp(client) => client.cwd(path),
-            Client::Ftps(client) => client.cwd(path),
-            Client::Sftp(client) => client.cwd(path),
-        }
+        delegate!(self, cwd, path)
     }
 
     /// Set transfer type (binary or ASCII)
     pub fn transfer_type(&mut self, mode: TransferMode) -> Result<(), FtpError> {
-        match self {
-            Client::Ftp(client) => client.transfer_type(mode),
-            Client::Ftps(client) => client.transfer_type(mode),
-            Client::Sftp(client) => client.transfer_type(mode),
-        }
+        delegate!(self, transfer_type, mode)
     }
 
     /// Get list of files in directory (NLST command)
     pub fn nlst(&mut self, path: Option<&str>) -> Result<Vec<String>, FtpError> {
-        match self {
-            Client::Ftp(client) => client.nlst(path),
-            Client::Ftps(client) => client.nlst(path),
-            Client::Sftp(client) => client.nlst(path),
-        }
+        delegate!(self, nlst, path)
     }
 
     /// Get file modification time (MDTM command)
     pub fn mdtm(&mut self, filename: &str) -> Result<chrono::NaiveDateTime, FtpError> {
-        match self {
-            Client::Ftp(client) => client.mdtm(filename),
-            Client::Ftps(client) => client.mdtm(filename),
-            Client::Sftp(client) => client.mdtm(filename),
-        }
+        delegate!(self, mdtm, filename)
     }
 
     /// Get file size (SIZE command)
     pub fn size(&mut self, filename: &str) -> Result<usize, FtpError> {
-        match self {
-            Client::Ftp(client) => client.size(filename),
-            Client::Ftps(client) => client.size(filename),
-            Client::Sftp(client) => client.size(filename),
-        }
+        delegate!(self, size, filename)
     }
 
     /// Retrieve file contents
@@ -208,11 +198,7 @@ impl Client {
     where
         F: FnMut(&mut dyn Read) -> Result<D, FtpError>,
     {
-        match self {
-            Client::Ftp(client) => client.retr(filename, callback),
-            Client::Ftps(client) => client.retr(filename, callback),
-            Client::Sftp(client) => client.retr(filename, callback),
-        }
+        delegate!(self, retr, filename, callback)
     }
 
     /// Upload file contents
@@ -221,37 +207,21 @@ impl Client {
         filename: &str,
         reader: &mut R,
     ) -> Result<u64, FtpError> {
-        match self {
-            Client::Ftp(client) => client.put_file(filename, reader),
-            Client::Ftps(client) => client.put_file(filename, reader),
-            Client::Sftp(client) => client.put_file(filename, reader),
-        }
+        delegate!(self, put_file, filename, reader)
     }
 
     /// Rename a file
     pub fn rename(&mut self, from: &str, to: &str) -> Result<(), FtpError> {
-        match self {
-            Client::Ftp(client) => client.rename(from, to),
-            Client::Ftps(client) => client.rename(from, to),
-            Client::Sftp(client) => client.rename(from, to),
-        }
+        delegate!(self, rename, from, to)
     }
 
     /// Remove/delete a file
     pub fn rm(&mut self, filename: &str) -> Result<(), FtpError> {
-        match self {
-            Client::Ftp(client) => client.rm(filename),
-            Client::Ftps(client) => client.rm(filename),
-            Client::Sftp(client) => client.rm(filename),
-        }
+        delegate!(self, rm, filename)
     }
 
     /// Quit/disconnect from the server
     pub fn quit(self) -> Result<(), FtpError> {
-        match self {
-            Client::Ftp(client) => client.quit(),
-            Client::Ftps(client) => client.quit(),
-            Client::Sftp(client) => client.quit(),
-        }
+        delegate!(self, quit)
     }
 }
