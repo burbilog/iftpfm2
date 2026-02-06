@@ -18,7 +18,6 @@ all:
 	@echo "  test-pid-no-xdg        - PID handling test WITHOUT XDG_RUNTIME_DIR"
 	@echo ""
 	@echo "Other targets:"
-	@echo "  doc        - Generate Rust documentation (output: doc/)"
 	@echo "  cloc       - Count lines of code (requires cloc utility)"
 
 # install into ~/.cargo/bin
@@ -84,16 +83,6 @@ test-pid:
 test-pid-no-xdg:
 	cargo build
 	./test_pid_no_xdg.sh
-
-# generate and install rust documentation (always rebuilds)
-.PHONY: doc
-doc:
-	@echo "Generating fresh documentation..."
-	@rm -rf doc target/doc
-	cargo doc --no-deps
-	@mkdir -p doc
-	@cp -r target/doc/* doc/
-	@echo "Documentation regenerated in doc/"
 
 # Count lines of code (excludes build directories and other temporary files)
 cloc:

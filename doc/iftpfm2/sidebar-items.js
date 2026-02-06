@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["PROGRAM_NAME","PROGRAM_VERSION"],"mod":["cli","config","ftp_ops","instance","logging","protocols","shutdown"]};

@@ -3,3 +3,4 @@ target/
 Cargo.lock
 repomix-output.xml
 .cecli*
+doc/

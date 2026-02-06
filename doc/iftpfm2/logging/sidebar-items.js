@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["is_debug_enabled","log","log_debug","log_with_thread","set_debug_mode","set_log_file"],"static":["DEBUG_MODE","LOG_FILE"]};

@@ -1,2 +1,0 @@
-createSrcSidebar('[["iftpfm2",["",[["protocols",[],["ftp.rs","ftps.rs","mod.rs","sftp.rs"]]],["cli.rs","config.rs","ftp_ops.rs","instance.rs","lib.rs","logging.rs","shutdown.rs"]]],["migrate_csv_to_jsonl",["",[],["migrate_csv_to_jsonl.rs"]]]]');
-//{"start":19,"fragment_lengths":[161,61]}

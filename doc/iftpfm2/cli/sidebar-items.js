@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["parse_args","print_usage"],"struct":["CliArgs"]};

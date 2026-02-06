@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["transfer_files"]};
