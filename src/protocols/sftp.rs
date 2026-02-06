@@ -9,7 +9,6 @@ use std::net::ToSocketAddrs;
 use std::path::Path;
 use std::time::Duration;
 use ssh2::{Session, Sftp};
-use crate::logging::log_with_thread;
 use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
 
 /// SFTP client for SSH File Transfer Protocol connections
@@ -37,8 +36,6 @@ impl FileTransferClient for SftpClient {
             .to_socket_addrs()
             .map_err(FtpError::ConnectionError)?
             .collect();
-
-        let _ = log_with_thread(format!("[SFTP] Connecting to {}:{}...", host, port), None);
 
         if addrs.is_empty() {
             return Err(FtpError::ConnectionError(std::io::Error::new(
@@ -120,8 +117,6 @@ impl FileTransferClient for SftpClient {
                     format!("[SFTP] Failed to create SFTP channel: {}", e),
                 ))
             })?;
-
-            let _ = log_with_thread(format!("[SFTP] Connected to {}", addr), None);
 
             return Ok(SftpClient {
                 _session: session,

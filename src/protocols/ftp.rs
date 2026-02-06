@@ -8,7 +8,6 @@ use std::net::ToSocketAddrs;
 use std::time::Duration;
 use suppaftp::FtpStream;
 
-use crate::logging::log_with_thread;
 use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
 
 /// FTP client for plain (unencrypted) FTP connections
@@ -35,8 +34,6 @@ impl FileTransferClient for FtpClient {
             .map_err(FtpError::ConnectionError)?
             .collect();
 
-        let _ = log_with_thread(format!("[FTP] Connecting to {}:{}...", host, port), None);
-
         if addrs.is_empty() {
             return Err(FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -48,10 +45,7 @@ impl FileTransferClient for FtpClient {
         let mut last_error = None;
         for addr in addrs {
             match FtpStream::connect_timeout(addr, timeout) {
-                Ok(stream) => {
-                    let _ = log_with_thread(format!("[FTP] Connected to {}", addr), None);
-                    return Ok(FtpClient { stream });
-                }
+                Ok(stream) => return Ok(FtpClient { stream }),
                 Err(e) => last_error = Some(e),
             }
         }

@@ -26,9 +26,12 @@ fn connect_and_login(
     timeout: Duration,
     insecure_skip_verify: bool,
     server_type: &str, // "SOURCE" or "TARGET" for logging
+    thread_id: usize,
 ) -> Result<Client, String> {
     // For FTP/FTPS, password is required (validated during config parsing)
     // For SFTP with keyfile, password can be None
+    let _ = log_with_thread(format!("[{}] Connecting to {}:{}...", proto, host, port), Some(thread_id));
+
     let password_for_login = match proto {
         Protocol::Sftp if keyfile.is_some() => password.unwrap_or(""),
         _ => password.ok_or_else(|| {
@@ -40,7 +43,10 @@ fn connect_and_login(
     };
 
     let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password, keyfile) {
-        Ok(c) => c,
+        Ok(c) => {
+            let _ = log_with_thread(format!("[{}] Connected successfully", proto), Some(thread_id));
+            c
+        }
         Err(e) => {
             return Err(format!(
                 "Error connecting to {} FTP server {}:{} ({}s timeout): {}",
@@ -364,6 +370,7 @@ pub fn transfer_files(
         timeout,
         insecure_skip_verify,
         "SOURCE",
+        thread_id,
     ) {
         Ok(client) => client,
         Err(e) => {
@@ -384,6 +391,7 @@ pub fn transfer_files(
         timeout,
         insecure_skip_verify,
         "TARGET",
+        thread_id,
     ) {
         Ok(client) => client,
         Err(e) => {
