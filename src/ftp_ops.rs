@@ -563,7 +563,7 @@ pub fn transfer_files(
                         continue; // Skip to next file
                     }
                 };
-                match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
+                match ftp_to.put_file(&tmp_filename, &mut reader) {
                     Ok(bytes_written) => {
                         let _ = log_with_thread(
                             format!(
@@ -588,7 +588,7 @@ pub fn transfer_files(
                             ),
                             Some(thread_id),
                         );
-                        let upload_verified = match ftp_to.size(tmp_filename.as_str()) {
+                        let upload_verified = match ftp_to.size(&tmp_filename) {
                             Ok(actual_size) => {
                                 if actual_size == file_size {
                                     let _ = log_with_thread(
@@ -688,7 +688,7 @@ pub fn transfer_files(
                                                 Some(thread_id),
                                             );
                                             // Cleanup: try to remove the temporary file
-                                            let _ = ftp_to.rm(tmp_filename.as_str());
+                                            let _ = ftp_to.rm(&tmp_filename);
                                         }
                                     }
                                 }
@@ -702,7 +702,7 @@ pub fn transfer_files(
                                 ),
                                 Some(thread_id),
                             );
-                            let _ = ftp_to.rm(tmp_filename.as_str());
+                            let _ = ftp_to.rm(&tmp_filename);
                         }
                     }
                     Err(e) => {
@@ -711,7 +711,7 @@ pub fn transfer_files(
                             filename, file_size, config.proto_to, config.ip_address_to, config.path_to, config.login_to, e
                         ), Some(thread_id));
                         // Cleanup: try to remove the temporary file
-                        let _ = ftp_to.rm(tmp_filename.as_str());
+                        let _ = ftp_to.rm(&tmp_filename);
                     }
                 }
             }
