@@ -38,7 +38,7 @@ use std::process; // For process::exit
 fn main() {
     // Parse arguments first to setup logging
     // These functions are now part of the library, accessed via the use statement.
-    let cli::CliArgs { delete, log_file: log_file_option, stdout,
+    let cli::CliArgs { delete, log_file: log_file_option,
                        config_file: config_file_option,
                        parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify,
                        temp_dir, debug, ram_threshold } =
@@ -59,15 +59,9 @@ fn main() {
 
     // Set up logging destination
     // - If -l flag is used, log to the specified file
-    // - If -s flag is used or neither flag is used, log to stdout (default behavior)
+    // - Otherwise, log to stdout (default behavior)
     if let Some(lf) = log_file_option {
         set_log_file(lf); // from iftpfm2::logging
-    } else {
-        // Explicitly note stdout logging when -s flag was used
-        // When neither -s nor -l is used, stdout is also the default (LOG_FILE is None)
-        if stdout {
-            let _ = log("Logging to stdout (explicit via -s flag)");
-        }
     }
 
     // Check for single instance after logging is configured

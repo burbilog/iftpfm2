@@ -6,7 +6,6 @@ use std::fmt;
 pub struct CliArgs {
     pub delete: bool,
     pub log_file: Option<String>,
-    pub stdout: bool,
     pub config_file: Option<String>,
     pub parallel: usize,
     pub randomize: bool,
@@ -62,8 +61,7 @@ Options:
   -v                 Show version information
   -d                 Delete source files after successful transfer
   -r                 Randomize file transfer order
-  -l <logfile>       Write logs to the specified file (mutually exclusive with -s)
-  -s                 Write logs to stdout (mutually exclusive with -l)
+  -l <logfile>       Write logs to the specified file (default: stdout)
   -p <parallel>      Number of parallel transfers (default: 1)
   -g <seconds>       Grace period in seconds before SIGKILL (default: 30)
   -t <seconds>       Connection timeout in seconds (default: 30)
@@ -76,7 +74,10 @@ Options:
                      Skip TLS certificate verification for FTPS (DANGEROUS)
 
 Arguments:
-  config_file        Path to JSONL configuration file",
+  config_file        Path to JSONL configuration file
+
+Logging:
+  By default, logs are written to stdout. Use -l to write to a file.",
         crate::PROGRAM_NAME
     );
 }
@@ -102,7 +103,6 @@ Arguments:
 pub fn parse_args() -> Result<CliArgs, CliError> {
     let mut log_file = None;
     let mut delete = false;
-    let mut stdout = false;
     let mut config_file = None;
     let mut parallel = 1;
     let mut randomize = false;
@@ -127,7 +127,6 @@ pub fn parse_args() -> Result<CliArgs, CliError> {
                 return Err(CliError::VersionRequested);
             }
             "-d" => delete = true,
-            "-s" => stdout = true,
             "-l" => {
                 let arg = args.next().ok_or_else(|| {
                     eprintln!("Error: Missing log file argument");
@@ -224,17 +223,9 @@ pub fn parse_args() -> Result<CliArgs, CliError> {
         return Err(CliError::MissingArgument("config file".to_string()));
     }
 
-    // Check mutual exclusivity of -s and -l flags
-    if stdout && log_file.is_some() {
-        eprintln!("Error: -s and -l flags are mutually exclusive");
-        print_usage();
-        return Err(CliError::MutuallyExclusiveFlags("-s and -l flags are mutually exclusive".to_string()));
-    }
-
     Ok(CliArgs {
         delete,
         log_file,
-        stdout,
         config_file,
         parallel,
         randomize,
