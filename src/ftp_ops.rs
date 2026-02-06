@@ -181,19 +181,17 @@ fn check_file_should_transfer(
 /// Encapsulates either RAM (Vec<u8>) or disk (NamedTempFile) storage
 enum TransferBuffer {
     Ram(Vec<u8>),
-    Disk(NamedTempFile),
+    Disk { file: NamedTempFile, size: u64 },
 }
 
 impl TransferBuffer {
     /// Get the size of the buffer in bytes
+    /// For RAM: O(1) - just returns vec.len()
+    /// For Disk: O(1) - returns cached size (no metadata() syscall)
     fn size(&self) -> u64 {
         match self {
             TransferBuffer::Ram(vec) => vec.len() as u64,
-            TransferBuffer::Disk(temp_file) => temp_file
-                .as_file()
-                .metadata()
-                .map(|m| m.len())
-                .unwrap_or(0),
+            TransferBuffer::Disk { size, .. } => *size,
         }
     }
 
@@ -202,7 +200,7 @@ impl TransferBuffer {
     fn into_reader(self) -> Result<Box<dyn Read + Send>, std::io::Error> {
         match self {
             TransferBuffer::Ram(vec) => Ok(Box::new(Cursor::new(vec))),
-            TransferBuffer::Disk(temp_file) => {
+            TransferBuffer::Disk { file: temp_file, .. } => {
                 // reopen() creates a new handle to the same file
                 match temp_file.reopen() {
                     Ok(reader) => Ok(Box::new(reader) as Box<dyn Read + Send>),
@@ -538,9 +536,9 @@ pub fn transfer_files(
                     format!("Using temp file: {}", temp_file.path().display()),
                     Some(thread_id),
                 );
-                std::io::copy(stream, &mut temp_file)
+                let bytes_written = std::io::copy(stream, &mut temp_file)
                     .map_err(suppaftp::FtpError::ConnectionError)?;
-                Ok(TransferBuffer::Disk(temp_file))
+                Ok(TransferBuffer::Disk { file: temp_file, size: bytes_written })
             }
         });
 
