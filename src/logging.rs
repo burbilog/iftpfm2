@@ -127,14 +127,21 @@ pub fn log_with_thread<T: AsRef<str>>(message: T, thread_id: Option<usize>) -> i
             let file = OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(log_file)?;
+                .open(&log_file)?;
             *handle_guard = Some(BufWriter::new(file));
         }
 
-        // Write to the cached handle
-        if let Some(ref mut writer) = *handle_guard {
-            writer.write_all(log_message.as_bytes())?;
-            writer.flush()?;
+        // Write to the cached handle, with fallback to stderr on failure
+        let write_result = if let Some(ref mut writer) = *handle_guard {
+            writer.write_all(log_message.as_bytes()).and_then(|_| writer.flush())
+        } else {
+            Ok(())
+        };
+
+        if let Err(e) = write_result {
+            // Fallback to stderr if file logging fails
+            eprintln!("[LOGGING FAILED: {}] {}", log_file, e);
+            eprintln!("{}", log_message.trim_end());
         }
     } else {
         // If no log file is set, print the message to stdout.
