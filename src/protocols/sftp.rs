@@ -9,6 +9,7 @@ use std::net::ToSocketAddrs;
 use std::path::Path;
 use std::time::Duration;
 use ssh2::{Session, Sftp};
+use crate::logging::log_with_thread;
 use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
 
 /// SFTP client for SSH File Transfer Protocol connections
@@ -36,6 +37,8 @@ impl FileTransferClient for SftpClient {
             .to_socket_addrs()
             .map_err(FtpError::ConnectionError)?
             .collect();
+
+        let _ = log_with_thread(format!("[SFTP] Connecting to {}:{}...", host, port), None);
 
         if addrs.is_empty() {
             return Err(FtpError::ConnectionError(std::io::Error::new(
@@ -68,7 +71,7 @@ impl FileTransferClient for SftpClient {
             let mut session = Session::new().map_err(|e| {
                 FtpError::ConnectionError(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Failed to create SSH session: {}", e),
+                    format!("[SFTP] Failed to create SSH session: {}", e),
                 ))
             })?;
 
@@ -77,7 +80,7 @@ impl FileTransferClient for SftpClient {
             session.handshake().map_err(|e| {
                 FtpError::ConnectionError(std::io::Error::new(
                     std::io::ErrorKind::ConnectionRefused,
-                    format!("SSH handshake failed: {}", e),
+                    format!("[SFTP] SSH handshake failed: {}", e),
                 ))
             })?;
 
@@ -114,9 +117,11 @@ impl FileTransferClient for SftpClient {
             let sftp = session.sftp().map_err(|e| {
                 FtpError::ConnectionError(std::io::Error::new(
                     std::io::ErrorKind::ConnectionRefused,
-                    format!("Failed to create SFTP channel: {}", e),
+                    format!("[SFTP] Failed to create SFTP channel: {}", e),
                 ))
             })?;
+
+            let _ = log_with_thread(format!("[SFTP] Connected to {}", addr), None);
 
             return Ok(SftpClient {
                 _session: session,
@@ -144,7 +149,7 @@ impl FileTransferClient for SftpClient {
         self.sftp.stat(Path::new(path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Failed to access path '{}': {}", path, e),
+                format!("[SFTP] Failed to access path '{}': {}", path, e),
             ))
         })?;
         self.current_dir = path.to_string();
@@ -162,7 +167,7 @@ impl FileTransferClient for SftpClient {
         let entries: Vec<(std::path::PathBuf, ssh2::FileStat)> = self.sftp.readdir(Path::new(dir)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to list directory '{}': {}", dir, e),
+                format!("[SFTP] Failed to list directory '{}': {}", dir, e),
             ))
         })?;
 
@@ -186,7 +191,7 @@ impl FileTransferClient for SftpClient {
         let stat = self.sftp.stat(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Failed to stat file '{}': {}", filename, e),
+                format!("[SFTP] Failed to stat file '{}': {}", filename, e),
             ))
         })?;
 
@@ -195,7 +200,7 @@ impl FileTransferClient for SftpClient {
         let secs = stat.mtime.ok_or_else(|| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("File '{}' has no modification time", filename),
+                format!("[SFTP] File '{}' has no modification time", filename),
             ))
         })? as i64;
 
@@ -204,7 +209,7 @@ impl FileTransferClient for SftpClient {
             .ok_or_else(|| {
                 FtpError::ConnectionError(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Invalid modification time: {}", secs),
+                    format!("[SFTP] Invalid modification time: {}", secs),
                 ))
             })
     }
@@ -214,7 +219,7 @@ impl FileTransferClient for SftpClient {
         let stat = self.sftp.stat(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Failed to stat file '{}': {}", filename, e),
+                format!("[SFTP] Failed to stat file '{}': {}", filename, e),
             ))
         })?;
         Ok(stat.size.unwrap_or(0) as usize)
@@ -228,7 +233,7 @@ impl FileTransferClient for SftpClient {
         let mut file = self.sftp.open(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Failed to open file '{}': {}", filename, e),
+                format!("[SFTP] Failed to open file '{}': {}", filename, e),
             ))
         })?;
 
@@ -244,7 +249,7 @@ impl FileTransferClient for SftpClient {
         let mut file = self.sftp.create(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to create file '{}': {}", filename, e),
+                format!("[SFTP] Failed to create file '{}': {}", filename, e),
             ))
         })?;
 
@@ -257,7 +262,7 @@ impl FileTransferClient for SftpClient {
         self.sftp.rename(Path::new(&from_path), Path::new(&to_path), None).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to rename '{}' to '{}': {}", from, to, e),
+                format!("[SFTP] Failed to rename '{}' to '{}': {}", from, to, e),
             ))
         })
     }
@@ -267,7 +272,7 @@ impl FileTransferClient for SftpClient {
         self.sftp.unlink(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to delete file '{}': {}", filename, e),
+                format!("[SFTP] Failed to delete file '{}': {}", filename, e),
             ))
         })
     }

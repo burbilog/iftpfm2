@@ -87,6 +87,8 @@ impl FileTransferClient for FtpsClient {
             .map_err(FtpError::ConnectionError)?
             .collect();
 
+        let _ = log_with_thread(format!("[FTPS] Connecting to {}:{}...", host, port), None);
+
         if addrs.is_empty() {
             return Err(FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -139,6 +141,7 @@ impl FileTransferClient for FtpsClient {
                     let connector = RustlsConnector::from(tls_config.clone());
                     match secure_stream.into_secure(connector, host) {
                         Ok(mut stream) => {
+                            let _ = log_with_thread(format!("[FTPS] TLS handshake successful, connected to {}", addr), None);
                             // Enable data channel protection (PROT P) for secure data transfer
                             let _ = stream.custom_command("PROT P", &[suppaftp::Status::CommandOk])?;
                             stream.set_mode(Mode::Passive);
