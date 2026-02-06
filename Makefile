@@ -1,6 +1,25 @@
 
 all:
-	@echo usage: make debug or make release or make install or make test or make test-sftp or make test-sftp-keys or make test-temp or make test-pid or make test-pid-no-xdg or make cloc
+	@echo "iftpfm2 - Interactive File Transfer for Professional Media 2"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Build targets:"
+	@echo "  debug      - Build debug version (cargo build)"
+	@echo "  release    - Build release version (cargo build --release)"
+	@echo "  install    - Install release to ~/.cargo/bin"
+	@echo ""
+	@echo "Test targets:"
+	@echo "  test       - Run all tests (unit + integration, including Docker if available)"
+	@echo "  test-sftp              - SFTP password authentication tests (Docker)"
+	@echo "  test-sftp-keys         - SFTP SSH key authentication tests (Docker)"
+	@echo "  test-temp              - Temp directory and debug logging test"
+	@echo "  test-pid               - PID file handling test"
+	@echo "  test-pid-no-xdg        - PID handling test WITHOUT XDG_RUNTIME_DIR"
+	@echo ""
+	@echo "Other targets:"
+	@echo "  doc        - Generate Rust documentation (output: doc/)"
+	@echo "  cloc       - Count lines of code (requires cloc utility)"
 
 # install into ~/.cargo/bin
 install: release
