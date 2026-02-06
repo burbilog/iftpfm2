@@ -34,6 +34,7 @@ impl FileTransferClient for SftpClient {
         user: &str,
         password: Option<&str>,
         keyfile_path: Option<&str>,
+        keyfile_passphrase: Option<&str>,
     ) -> Result<Self, FtpError>
     where
         Self: Sized,
@@ -98,8 +99,8 @@ impl FileTransferClient for SftpClient {
                     session.userauth_password(user, pwd)
                 }
                 (None, Some(keyfile)) => {
-                    // Keyfile authentication
-                    session.userauth_pubkey_file(user, None, Path::new(keyfile), None)
+                    // Keyfile authentication (with optional passphrase)
+                    session.userauth_pubkey_file(user, None, Path::new(keyfile), keyfile_passphrase)
                 }
                 (None, None) => {
                     // This should have been validated during config parsing

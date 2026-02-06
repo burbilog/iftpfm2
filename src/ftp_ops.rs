@@ -23,6 +23,7 @@ fn connect_and_login(
     login: &str,
     password: Option<&String>,
     keyfile: Option<&str>,
+    keyfile_passphrase: Option<&str>,
     path: &str,
     timeout: Duration,
     insecure_skip_verify: bool,
@@ -43,7 +44,7 @@ fn connect_and_login(
         })?,
     };
 
-    let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password.map(|s| s.as_str()), keyfile) {
+    let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password.map(|s| s.as_str()), keyfile, keyfile_passphrase) {
         Ok(c) => {
             let _ = log_with_thread(format!("[{}] Connected successfully", proto), Some(thread_id));
             c
@@ -369,6 +370,7 @@ pub fn transfer_files(
         &config.login_from,
         config.password_from.as_ref().map(|s| s.expose_secret()),
         config.keyfile_from.as_deref(),
+        config.keyfile_pass_from.as_ref().map(|s| s.expose_secret().as_str()),
         &config.path_from,
         timeout,
         insecure_skip_verify,
@@ -390,6 +392,7 @@ pub fn transfer_files(
         &config.login_to,
         config.password_to.as_ref().map(|s| s.expose_secret()),
         config.keyfile_to.as_deref(),
+        config.keyfile_pass_to.as_ref().map(|s| s.expose_secret().as_str()),
         &config.path_to,
         timeout,
         insecure_skip_verify,
@@ -766,6 +769,7 @@ mod tests {
             login_from: "test".to_string(),
             password_from: Some(Secret::new("test".to_string())),
             keyfile_from: None,
+                keyfile_pass_from: None,
             path_from: "/test/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
@@ -773,6 +777,7 @@ mod tests {
             login_to: "test".to_string(),
             password_to: Some(Secret::new("test".to_string())),
             keyfile_to: None,
+                keyfile_pass_to: None,
             path_to: "/test/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -799,6 +804,7 @@ mod tests {
             login_from: "test".to_string(),
             password_from: Some(Secret::new("test".to_string())),
             keyfile_from: None,
+                keyfile_pass_from: None,
             path_from: "/test/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
@@ -806,6 +812,7 @@ mod tests {
             login_to: "test".to_string(),
             password_to: Some(Secret::new("test".to_string())),
             keyfile_to: None,
+                keyfile_pass_to: None,
             path_to: "/test/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,

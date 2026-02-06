@@ -130,6 +130,7 @@ Where:
 - `login_from`: Source username (string)
 - `password_from`: Source password (string, for FTP/FTPS/SFTP password auth)
 - `keyfile_from`: Source SSH private key path (string, optional for SFTP key auth)
+- `keyfile_pass_from`: Source SSH private key passphrase (string, optional, only used with keyfile_from)
 - `path_from`: Source directory path (must be literal path, no wildcards)
 - `proto_from`: Source protocol - "ftp", "ftps", or "sftp" (optional, default: "ftp")
 - `host_to`: Destination server hostname/IP (string)
@@ -137,6 +138,7 @@ Where:
 - `login_to`: Destination username (string)
 - `password_to`: Destination password (string, for FTP/FTPS/SFTP password auth)
 - `keyfile_to`: Destination SSH private key path (string, optional for SFTP key auth)
+- `keyfile_pass_to`: Destination SSH private key passphrase (string, optional, only used with keyfile_to)
 - `path_to`: Destination directory path (string)
 - `proto_to`: Destination protocol - "ftp", "ftps", or "sftp" (optional, default: "ftp")
 - `age`: Minimum file age to transfer (seconds, number) - use `0` to disable age checking and transfer all files immediately
@@ -240,6 +242,12 @@ SFTP with SSH key authentication (requires `keyfile_from`/`keyfile_to` fields):
 {"host_from":"sftp.example.com","port_from":22,"login_from":"user1","keyfile_from":"/home/user/.ssh/id_rsa","path_from":"/outgoing","proto_from":"sftp","host_to":"sftp.example.com","port_to":22,"login_to":"user2","keyfile_to":"/home/user/.ssh/id_rsa","path_to":"/incoming","proto_to":"sftp","age":86400,"filename_regexp":".*\\.csv$"}
 ```
 
+SFTP with SSH key authentication with passphrase (use `keyfile_pass_from`/`keyfile_pass_to` fields):
+
+```
+{"host_from":"sftp.example.com","port_from":22,"login_from":"user1","keyfile_from":"/home/user/.ssh/id_rsa","keyfile_pass_from":"my_secret_passphrase","path_from":"/outgoing","proto_from":"sftp","host_to":"sftp.example.com","port_to":22,"login_to":"user2","keyfile_to":"/home/user/.ssh/id_rsa","keyfile_pass_to":"my_secret_passphrase","path_to":"/incoming","proto_to":"sftp","age":86400,"filename_regexp":".*\\.csv$"}
+```
+
 Using a fast SSD for temporary files with debug logging:
 
 ```
@@ -271,6 +279,13 @@ To run SFTP tests (requires Docker):
 ~~~
 make test-sftp
 ~~~
+
+This runs:
+- Password authentication test
+- SSH key authentication (no passphrase)
+- SSH key authentication with passphrase
+- Delete flag test
+- Regex filtering test
 
 Individual tests can be run directly:
 

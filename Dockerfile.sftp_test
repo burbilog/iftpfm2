@@ -1,0 +1,40 @@
+FROM debian:bullseye-slim
+
+# Install SSH server
+RUN apt-get update && apt-get install -y openssh-server && rm -rf /var/lib/apt/lists/*
+
+# Create user for SFTP
+RUN useradd -m -u 1001 -s /bin/bash sftpuser
+
+# Create directories for chroot SFTP
+# Chroot directory must be owned by root and not writable by others
+# SSH keys are stored outside chroot to avoid permission issues
+RUN mkdir -p /etc/sftp/keys/sftpuser /home/sftpuser/upload /run/sshd && \
+    chown -R root:root /home/sftpuser && \
+    chmod 755 /home/sftpuser && \
+    chown -R sftpuser:sftpuser /home/sftpuser/upload && \
+    chmod 755 /home/sftpuser/upload && \
+    chown -R root:root /etc/sftp/keys && \
+    chmod 755 /etc/sftp/keys && \
+    chmod 755 /etc/sftp/keys/sftpuser
+
+# Setup SSH config for key-based auth only
+RUN sed -i 's/#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config && \
+    echo "StrictModes no" >> /etc/ssh/sshd_config && \
+    echo "PasswordAuthentication no" >> /etc/ssh/sshd_config && \
+    echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config && \
+    echo "Match User sftpuser" >> /etc/ssh/sshd_config && \
+    echo "    ForceCommand internal-sftp" >> /etc/ssh/sshd_config && \
+    echo "    ChrootDirectory /home/sftpuser" >> /etc/ssh/sshd_config && \
+    echo "    AllowTcpForwarding no" >> /etc/ssh/sshd_config && \
+    echo "    X11Forwarding no" >> /etc/ssh/sshd_config && \
+    echo "    AuthorizedKeysFile /etc/sftp/keys/%u/.ssh/authorized_keys" >> /etc/ssh/sshd_config
+
+# Generate host keys
+RUN ssh-keygen -A
+
+# Expose SFTP port
+EXPOSE 22
+
+# Start SSH server
+CMD ["/usr/sbin/sshd", "-D", "-e"]

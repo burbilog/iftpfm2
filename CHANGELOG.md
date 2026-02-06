@@ -2,6 +2,32 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.7] - 2026-02-06
+
+### Added
+- **SFTP keyfile passphrase support** - new `keyfile_pass_from` and `keyfile_pass_to` config fields
+  - Allows using SSH keys that are protected with a passphrase
+  - Passphrase is only used when keyfile is specified (validated during config parsing)
+  - Resolves codereview.md issue #26 (Functional enhancement)
+
+### Changed
+- `FileTransferClient::connect()` trait method now includes `keyfile_passphrase` parameter
+- `Client::connect()` enum wrapper updated to pass passphrase to protocol implementations
+- SFTP authentication now uses `ssh2::Session::userauth_pubkey_file()` with passphrase
+- Config validation updated: `keyfile_pass_*` requires corresponding `keyfile_*` field
+
+### Tested
+- Added `test_config_validate_sftp_keyfile_passphrase_requires_keyfile` test
+- Added `test_config_validate_sftp_keyfile_with_passphrase_valid` test
+- All 34 unit tests pass
+- **New `test_sftp_keys_docker.sh` integration test** - SSH key authentication tests
+  - SSH key authentication without passphrase
+  - SSH key authentication with passphrase
+  - Uses custom `Dockerfile.sftp_test` for isolated SFTP testing environment
+- **`test_sftp_docker.sh`** - existing SFTP password authentication tests (unchanged)
+
+---
+
 ## [2.4.6] - 2026-02-06
 
 ### Fixed

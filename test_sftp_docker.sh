@@ -166,4 +166,14 @@ else
 fi
 
 echo ""
-echo "=== All SFTP tests passed! ==="
+echo "=========================================="
+echo "=== ALL SFTP TESTS PASSED! ==="
+echo "=========================================="
+echo "Tested:"
+echo "  - Password authentication"
+echo "  - Delete flag (-d)"
+echo "  - Regex filtering"
+echo ""
+echo "NOTE: SSH key authentication tests are in test_sftp_keys_docker.sh"
+echo "Run 'make test-sftp-keys' to test SSH key auth with passphrase"
+echo "=========================================="

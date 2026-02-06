@@ -77,6 +77,7 @@ impl FileTransferClient for FtpsClient {
         _user: &str,
         _password: Option<&str>,
         _keyfile_path: Option<&str>,
+        _keyfile_passphrase: Option<&str>,
     ) -> Result<Self, FtpError>
     where
         Self: Sized,

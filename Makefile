@@ -1,6 +1,6 @@
 
 all:
-	@echo usage: make debug or make release or make install or make test or make test-sftp or make test-temp or make test-pid or make test-pid-no-xdg or make cloc
+	@echo usage: make debug or make release or make install or make test or make test-sftp or make test-sftp-keys or make test-temp or make test-pid or make test-pid-no-xdg or make cloc
 
 # install into ~/.cargo/bin
 install: release
@@ -27,11 +27,29 @@ test:
 	./test_pid.sh
 	./test_pid_no_xdg.sh
 	./test_ram_threshold.sh
+	@echo ""
+	@command -v docker >/dev/null 2>&1 && { \
+		echo "Running Docker integration tests..."; \
+		./test_sftp_docker.sh; \
+		./test_sftp_keys_docker.sh; \
+	} || { \
+		echo "=================================================="; \
+		echo "WARNING: Docker not found - skipping SFTP tests"; \
+		echo "Install Docker to run full integration test suite:"; \
+		echo "  - test_sftp_docker.sh (SFTP password auth)"; \
+		echo "  - test_sftp_keys_docker.sh (SFTP SSH key auth)"; \
+		echo "=================================================="; \
+	}
 
-# run SFTP tests with Docker (separate target, not included in main test target)
+# run SFTP password authentication tests with Docker (also included in main test target if Docker is available)
 test-sftp:
 	cargo build
 	./test_sftp_docker.sh
+
+# run SFTP SSH key authentication tests with Docker (also included in main test target if Docker is available)
+test-sftp-keys:
+	cargo build
+	./test_sftp_keys_docker.sh
 
 # run temp directory test (separate target, not included in main test target)
 test-temp:

@@ -42,6 +42,7 @@ pub trait FileTransferClient {
     /// * `user` - Username for authentication (for SFTP)
     /// * `password` - Optional password for authentication
     /// * `keyfile_path` - Optional path to SSH private key (for SFTP)
+    /// * `keyfile_passphrase` - Optional passphrase for SSH private key (for SFTP)
     fn connect(
         host: &str,
         port: u16,
@@ -50,6 +51,7 @@ pub trait FileTransferClient {
         user: &str,
         password: Option<&str>,
         keyfile_path: Option<&str>,
+        keyfile_passphrase: Option<&str>,
     ) -> Result<Self, FtpError>
     where
         Self: Sized;
@@ -151,15 +153,16 @@ impl Client {
         user: &str,
         password: Option<&str>,
         keyfile_path: Option<&str>,
+        keyfile_passphrase: Option<&str>,
     ) -> Result<Self, FtpError> {
         let config = ProtocolConfig {
             insecure_skip_verify,
         };
 
         match proto {
-            Protocol::Ftp => Ok(Client::Ftp(FtpClient::connect(host, port, timeout, &config, user, password, keyfile_path)?)),
-            Protocol::Ftps => Ok(Client::Ftps(FtpsClient::connect(host, port, timeout, &config, user, password, keyfile_path)?)),
-            Protocol::Sftp => Ok(Client::Sftp(SftpClient::connect(host, port, timeout, &config, user, password, keyfile_path)?)),
+            Protocol::Ftp => Ok(Client::Ftp(FtpClient::connect(host, port, timeout, &config, user, password, keyfile_path, keyfile_passphrase)?)),
+            Protocol::Ftps => Ok(Client::Ftps(FtpsClient::connect(host, port, timeout, &config, user, password, keyfile_path, keyfile_passphrase)?)),
+            Protocol::Sftp => Ok(Client::Sftp(SftpClient::connect(host, port, timeout, &config, user, password, keyfile_path, keyfile_passphrase)?)),
         }
     }
 
