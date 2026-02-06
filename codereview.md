@@ -1,272 +1,210 @@
-# Code Review: iftpfm2
+# Code Review: iftpfm2 (после рефакторинга)
 
-## Общая архитектура
+## Что исправлено с прошлого ревью
 
-Проект представляет собой утилиту для переноса файлов между FTP/FTPS/SFTP серверами с поддержкой параллелизма, graceful shutdown и single-instance режима. Архитектура в целом разумная: разделение на модули по ответственности, trait-based абстракция протоколов, использование `lib.rs` + `main.rs`.
+Значительная часть замечаний была адресована: `lsof`/`kill` заменены на `nix::sys::signal`, пароли обёрнуты в `secrecy::Secret`, `parse_args` возвращает `Result` вместо `process::exit`, добавлен `delegate!` макрос, дублирование rename-логики устранено через `handle_successful_rename`, `full_path` хелпер в SFTP, `session.set_timeout` для SFTP, streaming через `TransferBuffer` (RAM/disk), фильтрация директорий в nlst для FTP/FTPS, user-isolated lock paths, stderr fallback при ошибках логирования, strip newlines в логах, debug mode. Качество кода заметно выросло.
 
 ---
 
 ## Критические проблемы
 
-### 1. Загрузка всего файла в память (`ftp_ops.rs`)
+### 1. `crate::shutdown` в main.rs — не компилируется
 
 ```rust
-let transfer_result = ftp_from.retr(filename.as_str(), |stream| {
-    let mut data = Vec::new();
-    let reader = stream;
-    reader.read_to_end(&mut data)
-        .map_err(suppaftp::FtpError::ConnectionError)?;
-    Ok(data)
+let signal_watch_thread = std::thread::spawn(|| {
+    use crate::shutdown::{is_shutdown_requested, get_signal_type};
+    // ...
 });
 ```
 
-Весь файл загружается в `Vec<u8>`, затем оборачивается в `Cursor` и передаётся на upload. Для больших файлов (гигабайты) это приведёт к OOM. Нужен streaming-подход — pipe между `retr` и `put_file`, либо временный файл на диске.
-
-### 2. Race condition в single-instance логике (`instance.rs`)
+`main.rs` — бинарный crate. У него нет модуля `shutdown`. `crate::` ссылается на сам бинарь, не на библиотеку `iftpfm2`. Кроме того, `get_signal_type` не реэкспортируется из `lib.rs`:
 
 ```rust
-// Clean up any stale socket file
-let _ = std::fs::remove_file(&socket_path);
-
-// Create a new socket for shutdown requests
-let listener = UnixListener::bind(&socket_path)?;
+// lib.rs
+pub use shutdown::{is_shutdown_requested, request_shutdown};
+// get_signal_type отсутствует ↑
 ```
 
-Между `remove_file` и `bind` есть окно для race condition. Если два процесса одновременно прошли `flock`, оба попытаются bind на один и тот же путь. Хотя `flock` должен это предотвращать, полагаться на два механизма одновременно (flock + socket) — хрупко.
+Нужно либо добавить `get_signal_type` в реэкспорт, либо использовать `iftpfm2::shutdown::get_signal_type`.
 
-### 3. Вызов `lsof` и `kill` через `Command` (`instance.rs`)
+### 2. Regex ошибка возвращает 1 вместо 0
 
 ```rust
-let output = Command::new("lsof")
-    .arg("-t")
-    .arg(socket_path)
-    .output()?;
+let regex = match Regex::new(&config.filename_regexp) {
+    Ok(re) => re,
+    Err(e) => {
+        let _ = log_with_thread(...);
+        return 1; // ← BUG
+    }
+};
 ```
 
-Зависимость от внешних утилит (`lsof`, `kill`) — это ненадёжно: они могут отсутствовать, вести себя по-разному на разных ОС, а `socket_path` не экранируется. Вместо `lsof` можно хранить PID в lock-файле (что уже делается!) и читать его оттуда. Вместо `Command::new("kill")` — использовать `nix::sys::signal::kill` или `libc::kill`.
-
-### 4. Отсутствие таймаута на SFTP-операции
-
-В `sftp.rs` таймауты устанавливаются только на TCP-стрим:
-
-```rust
-stream.set_read_timeout(Some(timeout))
-```
-
-Но ssh2-сессия может зависнуть на handshake или на операциях с файлами. `Session::set_timeout` из ssh2 не вызывается.
+`transfer_files` возвращает количество успешных трансферов. `return 1` при ошибке regex означает, что один файл якобы был успешно передан. Должно быть `return 0`.
 
 ---
 
 ## Серьёзные проблемы
 
-### 5. Дублирование кода в `Client` enum (`protocols/mod.rs`)
-
-Каждый метод `Client` — это match по трём вариантам с идентичным телом:
+### 3. `process::exit(1)` в библиотечном коде (`TransferBuffer`)
 
 ```rust
-pub fn login(&mut self, user: &str, password: &str) -> Result<(), FtpError> {
+fn into_reader(self) -> Box<dyn Read + Send> {
     match self {
-        Client::Ftp(client) => client.login(user, password),
-        Client::Ftps(client) => client.login(user, password),
-        Client::Sftp(client) => client.login(user, password),
-    }
-}
-```
-
-Это повторяется ~12 раз. Макрос `delegate!` или crate `enum_dispatch` сильно сократят boilerplate и уменьшат вероятность ошибки при добавлении нового протокола.
-
-### 6. Массивное дублирование в `ftp_ops.rs` — rename-логика
-
-Блоки обработки rename (успешного и после fallback через rm + rename) практически идентичны (~40 строк каждый): verify → log → increment → delete. Это нужно вынести в отдельную функцию:
-
-```rust
-fn handle_successful_rename(
-    ftp_from: &mut Client,
-    ftp_to: &mut Client,
-    filename: &str,
-    file_size: usize,
-    delete: bool,
-    thread_id: usize,
-) -> bool { ... }
-```
-
-### 7. `transfer_files` — функция на ~300 строк
-
-Функция `transfer_files` делает слишком много: connect src, login src, cwd src, connect dst, login dst, cwd dst, set binary mode, list files, filter, iterate, download, upload, verify, rename, verify again, delete. Её нужно декомпозировать.
-
-### 8. Пароль передаётся как пустая строка при отсутствии
-
-```rust
-ftp_from.login(
-    config.login_from.as_str(),
-    config.password_from.as_deref().unwrap_or(""),
-)
-```
-
-Для SFTP `login` — no-op, но для FTP/FTPS отправка пустого пароля может привести к неожиданному поведению. Валидация в `config.rs` требует пароль для FTP/FTPS, но если валидация обходится — это потенциальная дыра.
-
-### 9. `use crate::shutdown::{is_shutdown_requested, get_signal_type}` в `main.rs`
-
-```rust
-let signal_watch_thread = std::thread::spawn(|| {
-    use crate::shutdown::{is_shutdown_requested, get_signal_type};
-```
-
-В `main.rs` это бинарный crate, а `crate::` ссылается на сам бинарь, не на библиотеку. Это скомпилируется только потому что `use iftpfm2::*` реэкспортирует эти функции в scope, но `crate::shutdown` не существует в бинарном crate. Этот код **не компилируется**. Должно быть `iftpfm2::shutdown::...` или просто использовать уже импортированные имена.
-
----
-
-## Проблемы среднего уровня
-
-### 10. Логирование ошибок игнорируется повсеместно
-
-```rust
-let _ = log_with_thread(...);
-```
-
-Если логирование упало (диск полон, IO error), это молча проглатывается. Как минимум для критических сообщений стоит иметь fallback на stderr.
-
-### 11. `FtpError` как единый тип ошибки
-
-```rust
-pub type FtpError = suppaftp::FtpError;
-```
-
-SFTP-ошибки оборачиваются в `FtpError::ConnectionError(std::io::Error)`, теряя семантику. Лучше создать собственный enum ошибок с вариантами для FTP, SFTP, IO, TLS и т.д., с реализацией `From` для каждого.
-
-### 12. SFTP: `nlst` фильтрует директории, но FTP — нет
-
-В `sftp.rs` `nlst` фильтрует `is_dir()`, а в `ftp.rs`/`ftps.rs` — просто прокидывает результат `stream.nlst()`. Это разное поведение одного и того же trait-метода. Если в FTP-директории есть поддиректории, `transfer_files` попытается их скачать как файлы.
-
-### 13. `NoCertificateVerification` в `ftps.rs`
-
-```rust
-pub struct NoCertificateVerification;
-```
-
-Модуль `danger` виден только внутри `ftps.rs` (ok), но нет никакого предупреждения пользователю при запуске с `--insecure-skip-verify`. Стоит выводить заметное предупреждение в лог.
-
-### 14. `Config::Drop` zeroize — неполная защита
-
-```rust
-impl Drop for Config {
-    fn drop(&mut self) {
-        if let Some(ref mut p) = self.password_from {
-            p.zeroize();
+        TransferBuffer::Disk(temp_file) => {
+            match temp_file.reopen() {
+                Ok(reader) => Box::new(reader),
+                Err(_) => {
+                    Box::new(std::fs::File::open(temp_file.path()).unwrap_or_else(|_| {
+                        std::io::stderr().write_all(b"Critical error: ...").ok();
+                        std::process::exit(1);  // ← убивает процесс из библиотеки
+                    }))
+                }
+            }
         }
     }
 }
 ```
 
-Хорошая идея, но `String` в Rust может быть скопирован (clone), перемещён, а старая память не зануляется. Также `serde_json::from_str` создаёт промежуточные строки. Для серьёзной защиты нужен `secrecy::Secret<String>` или аналог.
+Проблемы: `process::exit` в библиотечном коде — антипаттерн; fallback через `File::open` после неудачного `reopen()` на тот же файл скорее всего тоже упадёт. Сигнатура должна быть `fn into_reader(self) -> Result<Box<dyn Read + Send>, io::Error>`, а ошибка — пробрасываться наверх.
 
-### 15. Rename fallback — удаление существующего файла
+### 4. `nlst` с SIZE-фильтрацией — O(n) сетевых вызовов
 
 ```rust
-if ftp_to.rm(filename.as_str()).is_ok() {
-    let _ = log_with_thread(
-        format!("Replaced existing file {}", filename),
-        Some(thread_id),
-    );
+// ftp.rs и ftps.rs
+let files_only: Vec<String> = all_names
+    .into_iter()
+    .filter(|name| {
+        if name == "." || name == ".." { return false; }
+        self.stream.size(name).is_ok()  // ← один SIZE запрос на каждый файл
+    })
+    .collect();
+```
+
+Для директории с 1000 записей это 1000 дополнительных SIZE-команд. На высоколатентных соединениях это превратит листинг в многоминутную операцию. Альтернатива — использовать `LIST` и парсить вывод (хотя это сложнее из-за различий между серверами). Как минимум стоит задокументировать этот trade-off и добавить предупреждение в лог, если количество entries велико.
+
+### 5. `OpenOptions::truncate(true)` перед `flock`
+
+```rust
+let mut lock_file = match OpenOptions::new()
+    .write(true)
+    .create(true)
+    .truncate(true)  // ← обнуляет файл ДО получения блокировки
+    .open(&pid_path)
+```
+
+Как обсуждалось ранее, `flock` защищает от race condition на socket. Но `truncate(true)` при `open()` обнуляет PID-файл ещё до попытки блокировки. Если процесс B открывает файл с truncate — PID процесса A стирается, хотя процесс A всё ещё работает и держит блокировку. Блокировка привязана к fd, а не к содержимому, поэтому flock продолжает работать. Но `signal_process_to_terminate` читает PID из этого файла:
+
+```rust
+let pid_str = std::fs::read_to_string(&pid_path)?;
+```
+
+Если файл уже обнулён truncate'ом процесса B — PID будет пустым, и сигнал не отправится. Решение: убрать `.truncate(true)`, записывать PID только после успешного flock, при этом делать `lock_file.set_len(0)` + `write_all` после получения блокировки.
+
+---
+
+## Проблемы среднего уровня
+
+### 6. `connect_and_login` — запутанная логика пароля
+
+```rust
+let password_for_login = match proto {
+    Protocol::Sftp if keyfile.is_some() => password.map(|s| s.as_str()).unwrap_or(""),
+    _ => password.map(|s| s.as_str()).ok_or_else(|| {
+        format!("BUG: Password required for {} but was None ...", proto)
+    })?,
+};
+```
+
+Для SFTP `login()` — no-op, поэтому значение `password_for_login` для SFTP+keyfile не имеет значения. Но код вычисляет его, создавая ложное впечатление, что пустой пароль передаётся на сервер. Проще сделать:
+
+```rust
+// Для SFTP login() — no-op, пароль не нужен
+let password_for_login = password.map(|s| s.as_str()).unwrap_or("");
+```
+
+### 7. Мёртвый код: `age == 0` в `check_file_should_transfer`
+
+Документация:
+```rust
+/// - `min_age_seconds == 0`: Age checking is disabled, all files pass age check
+```
+
+Но `config.validate()` отвергает `age == 0`:
+```rust
+if self.age == 0 {
+    return Err(Error::new(ErrorKind::InvalidInput, "age cannot be 0"));
 }
 ```
 
-Между `rm` и `rename` файл отсутствует на целевом сервере. Если процесс упадёт в этот момент — данные потеряны. Это фундаментальная проблема FTP (нет атомарного overwrite), но стоит хотя бы задокументировать этот риск.
+Комментарий описывает невозможный сценарий. Либо убрать ветку для `age == 0`, либо убрать проверку в validate (если хотите поддержать "без фильтра по возрасту").
 
-### 16. `check_single_instance` — привязка к `/tmp`
+### 8. `TransferBuffer::size()` получает размер повторно
 
-Hardcoded пути `/tmp/{PROGRAM_NAME}.sock` и `.pid` не работают, если `/tmp` смонтирован с `noexec` или если несколько пользователей запускают утилиту. Стоит использовать `$XDG_RUNTIME_DIR` или хотя бы включать UID в имя файла.
+```rust
+match transfer_result {
+    Ok(buffer) => {
+        let file_size = buffer.size();  // ← Для Disk вызывает metadata()
+        let file_size = usize::try_from(file_size).unwrap_or(usize::MAX);
+```
+
+`file_size` уже известен из `check_file_should_transfer` (через SIZE команду), а тут он перевычисляется из буфера. Для RAM-буфера это `vec.len()`, но для Disk — это `metadata().len()`, что может отличаться от FTP SIZE (например, если запись не была полностью flushed). Лучше передавать ожидаемый размер напрямую.
+
+### 9. `-s` флаг по-прежнему функционально бесполезен
+
+```rust
+if stdout {
+    let _ = log("Logging to stdout (explicit via -s flag)");
+}
+```
+
+Когда не задан ни `-s`, ни `-l`, логи и так идут в stdout. Флаг `-s` только печатает одну строку. Если он предназначен для явного намерения — ок, но стоит задокументировать это в `print_usage`:
+
+```
+-s                 Write logs to stdout (this is the default behavior;
+                   use this flag to make it explicit)
+```
 
 ---
 
 ## Мелкие замечания
 
-### 17. `as_str()` и `as_deref()` где не нужны
+### 10. `as_str()` по-прежнему избыточен в нескольких местах
 
 ```rust
-ftp_from.login(config.login_from.as_str(), ...)
-ftp_from.cwd(config.path_from.as_str())
+ftp_to.rename(&tmp_filename, &filename);   // ← ок, уже исправлено в некоторых
+ftp_to.rm(tmp_filename.as_str());          // ← .as_str() не нужен
 ```
 
-`&String` автоматически deref'ится в `&str`, поэтому `.as_str()` избыточен:
+Непоследовательно: в одних местах `&filename`, в других `filename.as_str()`.
+
+### 11. Тест `test_parse_config` — непрямое сравнение
 
 ```rust
-ftp_from.login(&config.login_from, ...)
+assert_eq!(configs[0].ip_address_from, expected[0].ip_address_from);
+assert_eq!(configs[0].port_from, expected[0].port_from);
+// ... 14 строк assert_eq
 ```
 
-### 18. `filename.as_str()` в цикле
+Поскольку `Secret` не поддерживает `PartialEq`, нельзя сравнить Config целиком. Но можно реализовать вручную `PartialEq` для тестов через `cfg(test)`, или вынести сравнение в хелпер.
+
+### 12. `TransferBuffer` не реализует `Drop` для cleanup при ошибках
+
+Если `transfer_result` — `Ok(buffer)`, но затем upload падает, `buffer` (если Disk) дропается, и `NamedTempFile` автоматически удаляет файл — это правильно. Но стоит это задокументировать, потому что поведение зависит от `NamedTempFile::drop`.
+
+### 13. Непоследовательное форматирование `keyfile_pass_from` в тестах
 
 ```rust
-for filename in file_list {
-    // ...
-    ftp_from.mdtm(filename.as_str())
+let config = Config {
+    password_from: Some(Secret::new("pass".to_string())),
+    keyfile_from: None,
+        keyfile_pass_from: None,  // ← лишний отступ
+    path_from: "/path/".to_string(),
 ```
 
-`filename` — `String`, можно просто `&filename`.
-
-### 19. `format!` для конкатенации путей в SFTP
-
-```rust
-let full_path = format!("{}/{}", self.current_dir.trim_end_matches('/'), filename);
-```
-
-Повторяется в каждом методе. Стоит вынести в приватный хелпер `fn full_path(&self, filename: &str) -> String`.
-
-### 20. Тесты минимальны
-
-Тесты покрывают: парсинг конфигурации, валидацию, shutdown-флаг, компиляцию regex. Нет интеграционных тестов для `transfer_files` (даже с mock-FTP сервером). Нет тестов для `logging`, `instance` в реальных сценариях. `test_ftp_client_send` — просто проверяет trait bound, не функциональность.
-
-### 21. `process::exit()` в `parse_args`
-
-```rust
-process::exit(1);
-```
-
-Вызов `process::exit` в библиотечном коде (`cli.rs` часть `lib.rs`) — антипаттерн. Это делает код нетестируемым. Лучше возвращать `Result<CliArgs, CliError>` и вызывать `exit` только в `main`.
-
-### 22. Неиспользуемый параметр `_stdout`
-
-```rust
-let cli::CliArgs { ..., stdout: _, ... } = parse_args();
-```
-
-Флаг `-s` парсится, но в `main.rs` игнорируется (связывается с `_`). Если stdout — это альтернатива логфайлу, то при `-s` не нужно вызывать `set_log_file` (что и так происходит), но флаг всё равно нефункционален — по умолчанию логи и так идут в stdout.
-
-### 23. `e.to_string().replace("\n", "")`
-
-```rust
-format!("Error getting modified time for file '{}': {}, skipping",
-    filename, e.to_string().replace("\n", ""))
-```
-
-Sanitization новых строк в одном месте, но не в остальных. Если это важно (log injection), нужно делать это единообразно в `log_with_thread`.
-
-### 24. `expect` в runtime-коде
-
-```rust
-let regex = Regex::new(&config.filename_regexp)
-    .expect("Regex pattern should be valid (validated in config parser)");
-```
-
-Даже с комментарием, `expect` в production-коде — плохая практика. Если валидация обойдена (например, через программный API), это паника.
-
-### 25. Документация `TransferMode::Binary`
-
-```rust
-/// Binary mode (untransferred)
-Binary,
-```
-
-Опечатка: "untransferred" → "untranslated" или "raw".
+Встречается во всех тестах config.rs — похоже на ошибку автоформатирования.
 
 ---
 
-## Что сделано хорошо
+## Итог
 
-Отмечу положительные аспекты: атомарная загрузка через временный файл с rename, обязательная верификация размера после upload, graceful shutdown через atomic-флаги (async-signal-safe), zeroize паролей в `Drop`, поддержка комментариев в конфиг-файле, валидация конфигурации с адекватными сообщениями об ошибках, использование `BufWriter` для логов, обработка poisoned mutex.
-
----
-
-## Рекомендуемые приоритеты
-
-По критичности: (1) исправить `crate::shutdown` в `main.rs` — код не компилируется, (2) добавить streaming для больших файлов, (3) убрать зависимость от `lsof`/`kill`, (4) декомпозировать `transfer_files`, (5) убрать `process::exit` из библиотечного кода, (6) унифицировать поведение `nlst` между протоколами, (7) добавить интеграционные тесты.
+Кодовая база значительно улучшилась. Из прошлых ~25 замечаний исправлено ~15. По приоритетам: (1) исправить `crate::shutdown` в main.rs — не скомпилируется, (2) `return 1` → `return 0` при ошибке regex, (3) убрать `truncate(true)` перед flock и переписать как truncate-after-lock, (4) изменить сигнатуру `TransferBuffer::into_reader` на `Result`, (5) задокументировать производительность nlst+SIZE.
