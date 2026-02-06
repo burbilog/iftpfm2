@@ -2,6 +2,43 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.5] - 2026-02-06
+
+### Fixed
+- **Multi-user isolation for lock files** - different users can now run the program simultaneously
+  - Lock files now use `$XDG_RUNTIME_DIR/iftpfm2.{sock,pid}` when available
+  - Fallback to `/tmp/iftpfm2_<uid>.{sock,pid}` when `XDG_RUNTIME_DIR` is not set
+  - Resolves codereview.md issue #16 (Medium priority)
+
+- **Rename fallback data loss risk** - documented non-atomic rename behavior
+  - Added detailed comment explaining the data loss window between `rm()` and `rename()`
+  - Documents FTP protocol limitation (RFC 3659) regarding atomic replace operations
+  - Resolves codereview.md issue #15 (Medium priority)
+
+### Changed
+- **Code cleanup** - resolved 7 minor code quality issues from codereview.md
+  - #17: Removed redundant `.as_str()` calls on config fields
+  - #18: Removed redundant `filename.as_str()` in file transfer loop
+  - #19: Extracted `full_path()` helper to eliminate SFTP path duplication
+  - #21: Removed `process::exit()` from library code, created `CliError` enum
+  - #22: Implemented `-s` flag functionality (stdout logging confirmation)
+  - #23: Centralized newline sanitization in `log_with_thread()`
+  - #24: Replaced `expect()` with proper error handling for regex compilation
+  - #25: Fixed typo in `TransferMode::Binary` documentation ("untransferred" → "untranslated")
+
+- **All Medium priority issues completed** (7/7) - 100% of medium priority codereview items resolved
+- Overall codereview progress: 21/22 items completed (95%)
+
+### Added
+- `test_pid_no_xdg.sh` integration test for lock file behavior without `XDG_RUNTIME_DIR`
+- `libc` and `temp-env` dependencies for UID retrieval and testing
+
+### Tested
+- All 48 tests pass (39 unit tests + 9 integration tests)
+- Multi-user isolation verified with both `XDG_RUNTIME_DIR` set and unset
+
+---
+
 ## [2.4.4] - 2026-02-06
 
 ### Changed
