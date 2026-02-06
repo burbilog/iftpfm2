@@ -162,11 +162,11 @@ pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
     let (socket_path, pid_path) = get_lock_paths();
 
     // ATOMIC: Try to acquire exclusive lock on PID file
-    // This is the critical race-condition-free operation
+    // IMPORTANT: Open WITHOUT truncate to avoid race condition.
+    // The file will be truncated AFTER we hold the lock.
     let mut lock_file = match OpenOptions::new()
         .write(true)
         .create(true)
-        .truncate(true)
         .open(&pid_path)
     {
         Ok(f) => f,
@@ -222,6 +222,14 @@ pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
     }
 
     // We hold the lock - we are the single instance
+    // Now safely truncate the file before writing our PID
+    if let Err(e) = lock_file.set_len(0) {
+        return Err(io::Error::new(
+            e.kind(),
+            format!("Failed to truncate lock file {}: {}", pid_path, e)
+        ));
+    }
+
     // Write our PID to the file
     if let Err(e) = lock_file.write_all(std::process::id().to_string().as_bytes()) {
         return Err(io::Error::new(
