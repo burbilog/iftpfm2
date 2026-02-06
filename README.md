@@ -257,6 +257,7 @@ This runs:
 - Connection timeout test (`test_conn_timeout.sh`)
 - FTPS with self-signed certificates test (`test_ftps.sh`)
 - Temp directory test (`test_temp_dir.sh`)
+- PID handling test (`test_pid.sh`)
 
 To run SFTP tests (requires Docker):
 
@@ -269,6 +270,7 @@ Individual tests can be run directly:
 ~~~
 ./test.sh           # Basic FTP transfer
 ./test_temp_dir.sh  # Temp directory with -T and --debug flags
+./test_pid.sh       # PID file creation and signaling (no lsof dependency)
 ~~~
 
 Author

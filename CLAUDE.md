@@ -21,7 +21,7 @@ make install
 # Run all tests (unit + integration)
 make test
 # or manually:
-cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh
+cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh && ./test_pid.sh
 
 # Run only unit tests
 cargo test --lib
@@ -52,6 +52,10 @@ cargo doc --open
   - Tests `-T` flag for custom temp directory
   - Tests `--debug` flag for debug logging
   - Verifies temp file paths appear in debug output
+- `test_pid.sh` - PID handling test
+  - Tests PID file creation with correct PID
+  - Verifies no `lsof` dependency (binary doesn't contain "lsof" string)
+  - Tests graceful termination via SIGTERM
 - `test_sftp_docker.sh` - SFTP test (separate `make test-sftp` target)
   - Prerequisites: Docker with `atmoz/sftp` container
   - Starts two SFTP servers on ports 3222/3223
@@ -182,9 +186,10 @@ cargo doc --open
 - `reset_shutdown_for_tests()` available to reset shutdown flag between tests
 - Integration tests use real FTP/FTPS servers (test.sh, test_ftps.sh, test_conn_timeout.sh, test_age.sh)
 - `test_temp_dir.sh` - Tests `-T` flag and `--debug` logging
+- `test_pid.sh` - Tests PID file creation and nix-based signaling
 - SFTP tests: `make test-sftp` (separate target, uses Docker atmoz/sftp container)
 - **Run all tests (unit + integration):** `make test` in the project root directory
-  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_ftps.sh`, and `./test_temp_dir.sh`
+  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, and `./test_pid.sh`
   - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
 
 **Connection Timeout:**

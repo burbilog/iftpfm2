@@ -4,10 +4,11 @@ use crate::shutdown::request_shutdown;
 use std::fs::OpenOptions;
 use std::io::{self, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::process::Command;
 use std::thread;
 use signal_hook::{iterator::Signals, consts::SIGTERM, consts::SIGINT};
 use fs2::FileExt;
+use nix::unistd::Pid;
+use nix::sys::signal::{self, Signal};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
@@ -19,86 +20,86 @@ static LOCK_FILE_HANDLE: Lazy<Mutex<Option<std::fs::File>>> = Lazy::new(|| Mutex
 
 // Signal the existing process to terminate gracefully
 fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Result<()> {
-    // Use lsof to find process using the socket
-    let output = Command::new("lsof")
-        .arg("-t")  // Output only PID
-        .arg(socket_path)
-        .output()?;
+    // Read PID from the lock file instead of using lsof
+    let pid_path = socket_path.replace(".sock", ".pid");
+    let pid_str = std::fs::read_to_string(&pid_path)
+        .map_err(|e| io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Failed to read PID from {}: {}", pid_path, e)
+        ))?
+        .trim()
+        .to_string();
 
-    if !output.status.success() {
-        return Err(io::Error::other("Failed to find process using lsof"));
-    }
-
-    let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if pid_str.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            "No process found using the socket"
+            "PID file is empty"
         ));
     }
 
-    let _ = log(&format!("Found old instance with PID {}, sending termination signal", pid_str));
+    let pid: u32 = pid_str.parse()
+        .map_err(|e| io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid PID in file: {}", e)
+        ))?;
+
+    let _ = log(&format!("Found old instance with PID {}, sending termination signal", pid));
 
     // Set the shutdown flag for our own process if we're signaling ourselves
-    // This case should ideally not happen if check_single_instance is called correctly,
-    // but it's a safeguard.
-    let our_pid = std::process::id().to_string();
-    if pid_str == our_pid {
+    let our_pid = std::process::id();
+    if pid == our_pid {
         request_shutdown();
         return Ok(());
     }
 
+    let nix_pid = Pid::from_raw(pid as i32);
+
     // Send SIGTERM to allow graceful shutdown
-    let term_output = Command::new("kill")
-        .arg("-15")  // SIGTERM for graceful termination
-        .arg(&pid_str)
-        .output()?;
+    signal::kill(nix_pid, Signal::SIGTERM)
+        .map_err(|e| io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("Failed to send SIGTERM to process {}: {}", pid, e)
+        ))?;
 
-    if !term_output.status.success() {
-        let stderr = String::from_utf8_lossy(&term_output.stderr);
-        return Err(io::Error::other(
-            format!("Failed to send termination signal to process {}: {}", pid_str, stderr)
-        ));
-    }
-
-    let _ = log(&format!("Successfully sent termination signal to old instance with PID {}", pid_str));
+    let _ = log(&format!("Successfully sent termination signal to old instance with PID {}", pid));
 
     // Wait for up to grace_seconds for the process to terminate
     for i in 1..=(grace_seconds * 2) { // Check twice per second
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        // Check if the process is still running
-        let check_output = Command::new("kill")
-            .arg("-0")  // Check if process exists
-            .arg(&pid_str)
-            .output()?;
-
-        if !check_output.status.success() {
-            let _ = log(&format!("Old instance with PID {} has terminated gracefully", pid_str));
-            return Ok(());
+        // Check if the process is still running using signal(0)
+        match signal::kill(nix_pid, None) {
+            Ok(_) => {
+                // Process still exists
+            }
+            Err(nix::Error::ESRCH) => {
+                // Process does not exist - it terminated
+                let _ = log(&format!("Old instance with PID {} has terminated gracefully", pid));
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Error checking process {}: {}", pid, e)
+                ));
+            }
         }
 
         if i % 2 == 0 { // Log every second
             let _ = log(&format!("Waiting for old instance with PID {} to terminate ({} of {} seconds)...",
-                pid_str, i/2, grace_seconds));
+                pid, i/2, grace_seconds));
         }
     }
 
     // If process didn't terminate after timeout, use SIGKILL as last resort
-    let _ = log(&format!("Old instance with PID {} did not terminate gracefully, forcing termination", pid_str));
-    let kill_output = Command::new("kill")
-        .arg("-9")  // SIGKILL for forced termination
-        .arg(&pid_str)
-        .output()?;
+    let _ = log(&format!("Old instance with PID {} did not terminate gracefully, forcing termination", pid));
+    signal::kill(nix_pid, Signal::SIGKILL)
+        .map_err(|e| io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("Failed to send SIGKILL to process {}: {}", pid, e)
+        ))?;
 
-    if !kill_output.status.success() {
-        let stderr = String::from_utf8_lossy(&kill_output.stderr);
-        return Err(io::Error::other(
-            format!("Failed to force termination of process {}: {}", pid_str, stderr)
-        ));
-    }
-
-    let _ = log(&format!("Forcibly terminated old instance with PID {}", pid_str));
+    let _ = log(&format!("Forcibly terminated old instance with PID {}", pid));
     std::thread::sleep(std::time::Duration::from_millis(500)); // Give OS a moment
 
     Ok(())

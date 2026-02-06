@@ -2,7 +2,32 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
-## [2.4.1] - 2026-02-06
+## [2.4.2] - 2026-02-06
+
+### Fixed
+- **External `lsof` and `kill` dependency removed** - PID handling now uses native Rust code
+  - PID is read directly from lock file instead of using `lsof` command
+  - Signals are sent via `nix` crate instead of `kill` command
+  - Resolves codereview.md issue #3 (Critical)
+  - Works on any Unix system without external utilities
+
+### Added
+- `nix` crate dependency for signal handling (features: signal, process)
+- `test_pid.sh` integration test for PID file creation and signaling
+- `make test-pid` target for running PID test independently
+- `test_pid.sh` included in `make test` suite
+
+### Changed
+- `signal_process_to_terminate()` now reads PID from file instead of calling `lsof`
+- Uses `nix::sys::signal::kill()` for sending SIGTERM/SIGKILL
+- Uses `nix::sys::signal::kill(pid, None)` for checking if process exists
+
+### Tested
+- `test_pid.sh` verifies PID file creation and correct PID value
+- `test_pid.sh` confirms no `lsof` string in binary
+- All integration tests pass
+
+---
 
 ### Fixed
 - **OOM on large file transfers** - files are now streamed to disk using `tempfile::NamedTempFile` instead of loading entirely into RAM
@@ -219,6 +244,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.4.2** - Removed lsof/kill dependency, native PID handling via nix crate
 - **2.4.1** - OOM fix with tempfile streaming, custom temp directory, debug logging
 - **2.4.0** - SFTP protocol support, working directory tracking
 - **2.3.0** - Separate protocol modules, logging fixes, code deduplication
