@@ -1,10 +1,10 @@
 use crate::config::Config;
-use crate::logging::log_with_thread;
+use crate::logging::{log_debug, log_with_thread};
 use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
 use regex::Regex;
-use std::io::Cursor;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tempfile::NamedTempFile;
 
 /// Verify final file size after rename
 ///
@@ -68,7 +68,7 @@ fn verify_final_file(
 ///
 /// # Example
 /// ```text
-/// // let count = transfer_files(&config, true, 1, None, false);
+/// // let count = transfer_files(&config, true, 1, None, false, None);
 /// ```
 pub fn transfer_files(
     config: &Config,
@@ -76,6 +76,7 @@ pub fn transfer_files(
     thread_id: usize,
     connect_timeout: Option<u64>,
     insecure_skip_verify: bool,
+    temp_dir: Option<&str>,
 ) -> i32 {
     // Check for shutdown request before starting
     if is_shutdown_requested() {
@@ -355,24 +356,59 @@ pub fn transfer_files(
 
         // Transfer to temporary file first for atomicity
         // FileTransferClient uses retr() with a reader callback for download
+        // TODO: calculate hash for future --verify-redownload option
+        //        (download file back from target and compare hashes)
         let transfer_result = ftp_from.retr(filename.as_str(), |stream| {
-            let mut data = Vec::new();
-            let reader = stream;
-            reader
-                .read_to_end(&mut data)
+            let mut temp_file = match temp_dir {
+                Some(dir) => NamedTempFile::new_in(dir)
+                    .map_err(|e| suppaftp::FtpError::ConnectionError(
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("tempfile create in {}: {}", dir, e))
+                    ))?,
+                None => NamedTempFile::new()
+                    .map_err(|e| suppaftp::FtpError::ConnectionError(
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("tempfile create: {}", e))
+                    ))?,
+            };
+            // Log temp file path in debug mode
+            let _ = log_debug(
+                format!("Using temp file: {}", temp_file.path().display()),
+                Some(thread_id),
+            );
+            std::io::copy(stream, &mut temp_file)
                 .map_err(suppaftp::FtpError::ConnectionError)?;
-            Ok(data)
+            Ok(temp_file)
         });
 
         match transfer_result {
-            Ok(data) => {
-                let file_size = data.len();
+            Ok(temp_file) => {
+                // Get file size from the temporary file
+                let file_size = temp_file
+                    .as_file()
+                    .metadata()
+                    .map(|m| m.len())
+                    .unwrap_or_else(|e| {
+                        let _ = log_with_thread(
+                            format!("Failed to get temp file metadata: {}", e),
+                            Some(thread_id),
+                        );
+                        0
+                    });
+                let file_size = usize::try_from(file_size).unwrap_or(usize::MAX);
                 let _ = log_with_thread(
                     format!("Uploading file {} ({} bytes)", filename, file_size),
                     Some(thread_id),
                 );
                 // Upload the data to target server using put_file() with a reader
-                let mut reader = Cursor::new(data);
+                let mut reader = match temp_file.reopen() {
+                    Ok(r) => r,
+                    Err(e) => {
+                        let _ = log_with_thread(
+                            format!("Failed to reopen temp file: {}", e),
+                            Some(thread_id),
+                        );
+                        continue;
+                    }
+                };
                 match ftp_to.put_file(tmp_filename.as_str(), &mut reader) {
                     Ok(bytes_written) => {
                         let _ = log_with_thread(
@@ -624,7 +660,7 @@ mod tests {
             filename_regexp: ".*".to_string(),
         };
 
-        let result = transfer_files(&config, false, 1, None, false);
+        let result = transfer_files(&config, false, 1, None, false, None);
         assert_eq!(
             result, 0,
             "Should return 0 when shutdown requested before start"

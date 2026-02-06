@@ -39,8 +39,14 @@ fn main() {
     // These functions are now part of the library, accessed via the use statement.
     let cli::CliArgs { delete, log_file: log_file_option, stdout: _,
                        config_file: config_file_option,
-                       parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify } =
+                       parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify,
+                       temp_dir, debug } =
         parse_args(); // from iftpfm2::cli
+
+    // Enable debug mode if requested
+    if debug {
+        set_debug_mode(true); // from iftpfm2::logging
+    }
 
     if let Some(lf) = log_file_option {
         set_log_file(lf); // from iftpfm2::logging
@@ -107,6 +113,7 @@ fn main() {
     }
     let configs_arc = Arc::new(configs_to_process);
     let delete_arc = Arc::new(delete);
+    let temp_dir_arc = Arc::new(temp_dir.as_deref());
 
     let total_transfers: i32 = pool.install(|| {
         configs_arc
@@ -119,7 +126,7 @@ fn main() {
                 }
                 let thread_id = rayon::current_thread_index().unwrap_or(idx);
                 // transfer_files is from iftpfm2::ftp_ops
-                transfer_files(cf_item, *delete_arc, thread_id, connect_timeout, insecure_skip_verify)
+                transfer_files(cf_item, *delete_arc, thread_id, connect_timeout, insecure_skip_verify, *temp_dir_arc)
             })
             .sum()
     });

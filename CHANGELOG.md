@@ -2,7 +2,36 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
-## [2.4.0] - 2026-02-03
+## [2.4.1] - 2026-02-06
+
+### Fixed
+- **OOM on large file transfers** - files are now streamed to disk using `tempfile::NamedTempFile` instead of loading entirely into RAM
+  - Previously: `Vec::new()` + `read_to_end()` loaded entire file into memory
+  - Now: `std::io::copy()` streams data to temporary file, then `put_file()` reads from disk
+  - Resolves codereview.md issue #1 (Critical)
+
+### Added
+- **`-T <dir>` flag** - specify custom directory for temporary files
+  - Useful for directing temp files to faster storage (SSD) or larger filesystems
+  - Default: system temp directory (`/tmp` on Unix, `%TEMP%` on Windows)
+- **`--debug` flag** - enable debug logging for diagnostic information
+  - Shows temporary file paths during transfer
+  - Zero overhead when disabled (compile-time check via `AtomicBool`)
+- `log_debug()` function in `logging.rs` - debug-only logging with early return when disabled
+- `test_temp_dir.sh` - integration test for `-T` and `--debug` flags
+- `make test-temp` target - run temp directory test independently
+
+### Changed
+- `transfer_files()` signature now includes `temp_dir: Option<&str>` parameter
+- Debug mode can be enabled/disabled at runtime via `set_debug_mode()`
+- All integration tests now run as part of `make test` (including `test_temp_dir.sh`)
+
+### Documentation
+- Updated README.md with new CLI flags (`-T`, `--debug`) and Testing section
+- Updated CLAUDE.md with CLI flags reference table and tempfile documentation
+- TODO comment added for future `--verify-redownload` feature with hash computation
+
+---
 
 ### Added
 - **SFTP protocol support** - new `sftp` option for `proto_from` and `proto_to` config fields
@@ -190,6 +219,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.4.1** - OOM fix with tempfile streaming, custom temp directory, debug logging
 - **2.4.0** - SFTP protocol support, working directory tracking
 - **2.3.0** - Separate protocol modules, logging fixes, code deduplication
 - **2.2.1** - Improved error messages, code quality improvements

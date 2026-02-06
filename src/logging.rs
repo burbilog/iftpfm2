@@ -3,6 +3,7 @@ use once_cell::sync::Lazy;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 // LOG_FILE is a thread-safe, lazily initialized global variable
@@ -19,6 +20,28 @@ pub static LOG_FILE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None)
 /// Thread-safe storage for optional buffered writer to log file.
 /// When None, either no log file is set or we haven't opened it yet.
 static LOG_FILE_HANDLE: Lazy<Mutex<Option<BufWriter<File>>>> = Lazy::new(|| Mutex::new(None));
+
+/// Global debug mode flag (AtomicBool for lock-free reads)
+///
+/// When true, debug messages are logged. When false, log_debug() is a no-op.
+/// This allows debug logging to be enabled/disabled at runtime without performance impact.
+pub static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
+
+/// Enable or disable debug mode
+///
+/// # Arguments
+/// * `enabled` - true to enable debug logging, false to disable
+pub fn set_debug_mode(enabled: bool) {
+    DEBUG_MODE.store(enabled, Ordering::SeqCst);
+}
+
+/// Check if debug mode is enabled
+///
+/// # Returns
+/// * `bool` - true if debug logging is enabled
+pub fn is_debug_enabled() -> bool {
+    DEBUG_MODE.load(Ordering::SeqCst)
+}
 
 /// Logs a message to either a file or stdout
 ///
@@ -121,6 +144,31 @@ pub fn log_with_thread<T: AsRef<str>>(message: T, thread_id: Option<usize>) -> i
     }
 
     Ok(())
+}
+
+/// Logs a debug message (only when debug mode is enabled)
+///
+/// This function is a no-op when debug mode is disabled, avoiding unnecessary
+/// string formatting and I/O. Use this for verbose diagnostic information.
+///
+/// # Arguments
+/// * `message` - The message to log (accepts anything that can be referenced as a str)
+/// * `thread_id` - Optional thread identifier
+///
+/// # Returns
+/// * `io::Result<()>` - Ok on success, Err if writing fails (always Ok when disabled)
+///
+/// # Example
+/// ```text
+/// // log_debug("Temp file path: /tmp/xxx", None);
+/// // set_debug_mode(true);  // Enable debug mode first
+/// // log_debug(format!("Size: {} bytes", size), Some(1));
+/// ```
+pub fn log_debug<T: AsRef<str>>(message: T, thread_id: Option<usize>) -> io::Result<()> {
+    if !is_debug_enabled() {
+        return Ok(());
+    }
+    log_with_thread(message, thread_id)
 }
 
 /// Sets the path for the log file

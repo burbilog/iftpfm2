@@ -21,7 +21,7 @@ make install
 # Run all tests (unit + integration)
 make test
 # or manually:
-cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh
+cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh
 
 # Run only unit tests
 cargo test --lib
@@ -48,6 +48,10 @@ cargo doc --open
 - `test_ftps.sh` - FTPS with self-signed certificates test
   - Generates self-signed certificate using openssl
   - Tests with and without `--insecure-skip-verify` flag
+- `test_temp_dir.sh` - Temp directory and debug logging test
+  - Tests `-T` flag for custom temp directory
+  - Tests `--debug` flag for debug logging
+  - Verifies temp file paths appear in debug output
 - `test_sftp_docker.sh` - SFTP test (separate `make test-sftp` target)
   - Prerequisites: Docker with `atmoz/sftp` container
   - Starts two SFTP servers on ports 3222/3223
@@ -97,6 +101,9 @@ cargo doc --open
 **Logging:**
 - Global `LOG_FILE` stores optional log file path
 - Global `LOG_FILE_HANDLE` caches `BufWriter<File>` to avoid opening file per message
+- Global `DEBUG_MODE` (AtomicBool) for enabling debug logging at runtime
+- `log_debug()` function - only logs when debug mode is enabled (zero overhead when disabled)
+- `set_debug_mode()` - enable/disable debug logging
 - Handles mutex poisoning gracefully
 - In non-test code, logging failures never panic (uses `let _ =`)
 
@@ -111,7 +118,10 @@ cargo doc --open
    - Check regex match
    - Get MDTM (modified time)
    - Check file age
-   - Transfer via `retr()` + `put_file()` to temporary file
+   - Transfer via `retr()` → temp file on disk → `put_file()` from temp file
+     - Uses `tempfile::NamedTempFile` for automatic cleanup
+     - Temp directory: `-T <dir>` flag (default: system temp dir)
+     - Debug mode (`--debug`) logs temp file paths
    - Verify upload size (MANDATORY - transfer fails if verification fails)
    - Rename temporary file to final name (retry after deleting existing file if rename fails)
    - Verify final file size using `verify_final_file()` (MANDATORY)
@@ -171,9 +181,10 @@ cargo doc --open
 - Unit tests use `serial_test` for tests that modify global state
 - `reset_shutdown_for_tests()` available to reset shutdown flag between tests
 - Integration tests use real FTP/FTPS servers (test.sh, test_ftps.sh, test_conn_timeout.sh, test_age.sh)
+- `test_temp_dir.sh` - Tests `-T` flag and `--debug` logging
 - SFTP tests: `make test-sftp` (separate target, uses Docker atmoz/sftp container)
 - **Run all tests (unit + integration):** `make test` in the project root directory
-  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, and `./test_ftps.sh`
+  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_ftps.sh`, and `./test_temp_dir.sh`
   - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
 
 **Connection Timeout:**
@@ -204,3 +215,20 @@ cargo doc --open
 4. **Blocking on listener thread join** - Listener thread is blocked on `incoming()`, spawn a thread to join it instead
 5. **Hardcoding version** - Always use `crate::PROGRAM_VERSION`
 6. **Using `unwrap()` in production code** - Use proper error handling; only use in tests
+
+## CLI Flags Reference
+
+| Flag | Argument | Description |
+|------|----------|-------------|
+| `-h` | - | Show help message and exit |
+| `-v` | - | Show version information |
+| `-d` | - | Delete source files after successful transfer |
+| `-l` | `<logfile>` | Write logs to specified file |
+| `-s` | - | Write logs to stdout (mutually exclusive with `-l`) |
+| `-p` | `<number>` | Number of parallel transfers (default: 1) |
+| `-r` | - | Randomize file processing order |
+| `-g` | `<seconds>` | Grace period before SIGKILL (default: 30) |
+| `-t` | `<seconds>` | Connection timeout in seconds (default: 30) |
+| `-T` | `<dir>` | Directory for temporary files (default: system temp) |
+| `--debug` | - | Enable debug logging (shows temp file paths, etc.) |
+| `--insecure-skip-verify` | - | Skip TLS certificate verification for FTPS (DANGEROUS) |

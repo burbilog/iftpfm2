@@ -164,6 +164,8 @@ You can also use the following options:
     -r: Randomize processing order of configuration entries
     -g seconds: Grace period for shutdown in seconds (default: 30)
     -t seconds: Connection timeout in seconds (default: 30)
+    -T dir: Directory for temporary files (default: system temp directory)
+    --debug: Enable debug logging (shows temp file paths, etc.)
     --insecure-skip-verify: Skip TLS certificate verification for FTPS connections (use with caution)
 
 Single Instance Behavior:
@@ -185,6 +187,14 @@ Logging Features:
 - Timestamps all messages
 - Includes thread IDs when using parallel mode
 - Can log to file or stdout
+- Debug mode (--debug) shows additional diagnostic information like temp file paths
+
+Temporary Files:
+- Files are downloaded to temporary storage during transfer
+- Use -T flag to specify custom temp directory (useful for SSD/fast storage)
+- Default: system temp directory (/tmp on Unix, %TEMP% on Windows)
+- Temp files are automatically cleaned up after transfer
+- Debug mode shows exact temp file paths for troubleshooting
 
 Examples
 ========
@@ -224,6 +234,42 @@ SFTP with SSH key authentication (requires `keyfile_from`/`keyfile_to` fields):
 ```
 {"host_from":"sftp.example.com","port_from":22,"login_from":"user1","keyfile_from":"/home/user/.ssh/id_rsa","path_from":"/outgoing","proto_from":"sftp","host_to":"sftp.example.com","port_to":22,"login_to":"user2","keyfile_to":"/home/user/.ssh/id_rsa","path_to":"/incoming","proto_to":"sftp","age":86400,"filename_regexp":".*\\.csv$"}
 ```
+
+Using a fast SSD for temporary files with debug logging:
+
+```
+iftpfm2 -T /mnt/ssd/tmp --debug config.jsonl
+```
+
+Testing
+======
+
+To run the full test suite (including integration tests):
+
+~~~
+make test
+~~~
+
+This runs:
+- Unit tests (`cargo test`)
+- Basic FTP transfer test (`test.sh`)
+- File age filtering test (`test_age.sh`)
+- Connection timeout test (`test_conn_timeout.sh`)
+- FTPS with self-signed certificates test (`test_ftps.sh`)
+- Temp directory test (`test_temp_dir.sh`)
+
+To run SFTP tests (requires Docker):
+
+~~~
+make test-sftp
+~~~
+
+Individual tests can be run directly:
+
+~~~
+./test.sh           # Basic FTP transfer
+./test_temp_dir.sh  # Temp directory with -T and --debug flags
+~~~
 
 Author
 ======

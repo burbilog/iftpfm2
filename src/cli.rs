@@ -13,6 +13,8 @@ pub struct CliArgs {
     pub grace_seconds: u64,
     pub connect_timeout: Option<u64>,
     pub insecure_skip_verify: bool,
+    pub temp_dir: Option<String>,
+    pub debug: bool,
 }
 
 /// Prints usage instructions for the program.
@@ -32,6 +34,8 @@ Options:
   -p <parallel>      Number of parallel transfers (default: 1)
   -g <seconds>       Grace period in seconds before SIGKILL (default: 30)
   -t <seconds>       Connection timeout in seconds (default: 30)
+  -T <dir>           Directory for temporary files (default: system temp dir)
+  --debug            Enable debug logging (shows temp file paths, etc.)
   --insecure-skip-verify
                      Skip TLS certificate verification for FTPS (DANGEROUS)
 
@@ -65,6 +69,8 @@ pub fn parse_args() -> CliArgs {
     let mut grace_seconds = 30; // Default grace period
     let mut connect_timeout: Option<u64> = None; // Default 30 seconds will be applied in ftp_ops
     let mut insecure_skip_verify = false; // Default: verify certificates
+    let mut temp_dir = None; // Default: use system temp directory
+    let mut debug = false; // Default: no debug logging
 
     let mut args = env::args();
     args.next(); // Skip program name
@@ -141,6 +147,16 @@ pub fn parse_args() -> CliArgs {
             "--insecure-skip-verify" => {
                 insecure_skip_verify = true;
             }
+            "--debug" => {
+                debug = true;
+            }
+            "-T" => {
+                temp_dir = Some(args.next().unwrap_or_else(|| {
+                    eprintln!("Error: Missing temp directory argument");
+                    print_usage();
+                    process::exit(1);
+                }));
+            }
             _ => {
                 if config_file.is_none() {
                     config_file = Some(arg);
@@ -176,5 +192,7 @@ pub fn parse_args() -> CliArgs {
         grace_seconds,
         connect_timeout,
         insecure_skip_verify,
+        temp_dir,
+        debug,
     }
 }
