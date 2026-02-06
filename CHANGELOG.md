@@ -2,6 +2,30 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.4] - 2026-02-06
+
+### Changed
+- **Code quality refactoring** - improved maintainability and reduced code duplication
+  - Resolves codereview.md issues #5, #6, #7, #8 (all Serious issues completed!)
+  - `Client` enum methods now use `delegate!` macro eliminating ~100 lines of boilerplate
+  - Extracted `connect_and_login()` helper function unifies source/target connection logic
+  - Extracted `check_file_should_transfer()` encapsulates file validation (regex, age, size)
+  - Extracted `handle_successful_rename()` eliminates post-rename code duplication
+  - `transfer_files()` reduced from 534 to 385 lines (-28%, -149 lines)
+  - Explicit password validation for FTP/FTPS with descriptive error messages
+
+### Fixed
+- **SFTP connection timeout** - SSH session now properly respects timeout setting
+  - Added `session.set_timeout()` after SSH handshake
+  - `test_sftp_timeout.sh` verifies timeout behavior with 5s and 2s tests
+  - Resolves codereview.md issue #4 (Critical)
+
+### Tested
+- `test_sftp_timeout.sh` added to verify SFTP connection timeout behavior
+- All existing integration tests pass
+
+---
+
 ## [2.4.3] - 2026-02-06
 
 ### Added
