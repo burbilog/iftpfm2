@@ -185,6 +185,14 @@ impl FileTransferClient for FtpsClient {
         let all_names = self.stream.nlst(path)?;
 
         // Filter out directories by checking SIZE (directories return error 550)
+        //
+        // NOTE: This is an O(n) operation where n = number of entries returned by NLST.
+        // Each entry requires a separate SIZE command to distinguish files from directories.
+        // This is a known limitation of the FTP protocol (RFC 3659) which doesn't provide
+        // a way to filter directories in NLST. For large directories, this may be slow.
+        //
+        // Potential optimization: Use MLSD/MLST commands if available (RFC 3659),
+        // which provide type information without extra round-trips.
         let files_only: Vec<String> = all_names
             .into_iter()
             .filter(|name| {
