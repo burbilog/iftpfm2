@@ -71,7 +71,23 @@ impl FileTransferClient for FtpClient {
     }
 
     fn nlst(&mut self, path: Option<&str>) -> Result<Vec<String>, FtpError> {
-        self.stream.nlst(path)
+        // Get all names from NLST
+        let all_names = self.stream.nlst(path)?;
+
+        // Filter out directories by checking SIZE (directories return error 550)
+        let files_only: Vec<String> = all_names
+            .into_iter()
+            .filter(|name| {
+                // Skip . and ..
+                if name == "." || name == ".." {
+                    return false;
+                }
+                // Try SIZE - if succeeds, it's a file; if fails, likely a directory
+                self.stream.size(name).is_ok()
+            })
+            .collect();
+
+        Ok(files_only)
     }
 
     fn mdtm(&mut self, filename: &str) -> Result<chrono::NaiveDateTime, FtpError> {
