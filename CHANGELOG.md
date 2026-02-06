@@ -2,6 +2,28 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.9] - 2026-02-06
+
+### Fixed
+- **SFTP authentication moved to login()** - unified protocol model across FTP, FTPS, and SFTP
+  - SFTP authentication now happens in `login()` method instead of `connect()`
+  - Added `AuthMethod` enum to `SftpClient` for storing credentials (password or keyfile)
+  - SFTP channel creation deferred to `login()` after authentication (ssh2 requirement)
+  - Simplified `connect_and_login()` by removing confusing `password_for_login` variable
+  - Resolves codereview.md issue #6 (Serious priority)
+
+### Changed
+- `SftpClient` struct now has `sftp: Option<Sftp>` field (created during login)
+- All SFTP methods now check for initialized SFTP channel with proper error messages
+- For SFTP with keyfile, empty string is passed to `login()` (credentials stored in struct)
+
+### Tested
+- All 34 unit tests pass
+- All integration tests pass (FTP, FTPS, SFTP timeout, age filtering, connection timeout, temp dir, PID, RAM threshold)
+- Docker SFTP tests pass (password auth and SSH key auth with/without passphrase)
+
+---
+
 ## [2.4.8] - 2026-02-06
 
 ### Changed

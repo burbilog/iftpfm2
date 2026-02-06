@@ -26,7 +26,7 @@ enum AuthMethod {
 /// SFTP client for SSH File Transfer Protocol connections
 pub struct SftpClient {
     _session: Session,
-    sftp: Sftp,
+    sftp: Option<Sftp>,
     current_dir: String,
     /// Authentication method to use during login
     auth_method: AuthMethod,
@@ -122,17 +122,12 @@ impl FileTransferClient for SftpClient {
             // Set timeout for SSH session operations (blocks operations if no data received)
             session.set_timeout(timeout.as_millis() as u32);
 
-            // Create SFTP channel
-            let sftp = session.sftp().map_err(|e| {
-                FtpError::ConnectionError(std::io::Error::new(
-                    std::io::ErrorKind::ConnectionRefused,
-                    format!("[SFTP] Failed to create SFTP channel: {}", e),
-                ))
-            })?;
+            // Note: SFTP channel will be created in login() after authentication
+            // SSH2 requires authentication before opening SFTP channel
 
             return Ok(SftpClient {
                 _session: session,
-                sftp,
+                sftp: None,
                 current_dir: String::from("/"),
                 auth_method,
             });
@@ -171,13 +166,30 @@ impl FileTransferClient for SftpClient {
                 std::io::ErrorKind::PermissionDenied,
                 format!("SFTP authentication failed for user '{}': {}", user, e),
             ))
-        })
+        })?;
+
+        // After successful authentication, create the SFTP channel
+        let sftp = self._session.sftp().map_err(|e| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                format!("[SFTP] Failed to create SFTP channel: {}", e),
+            ))
+        })?;
+        self.sftp = Some(sftp);
+
+        Ok(())
     }
 
     fn cwd(&mut self, path: &str) -> Result<(), FtpError> {
         // SFTP doesn't have a concept of "current working directory" in the same way as FTP
         // We verify that the path exists and is accessible, then store it for use in nlst
-        self.sftp.stat(Path::new(path)).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+        sftp.stat(Path::new(path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("[SFTP] Failed to access path '{}': {}", path, e),
@@ -195,7 +207,14 @@ impl FileTransferClient for SftpClient {
     fn nlst(&mut self, path: Option<&str>) -> Result<Vec<String>, FtpError> {
         let dir = path.unwrap_or_else(|| self.current_dir.as_str());
 
-        let entries: Vec<(std::path::PathBuf, ssh2::FileStat)> = self.sftp.readdir(Path::new(dir)).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+
+        let entries: Vec<(std::path::PathBuf, ssh2::FileStat)> = sftp.readdir(Path::new(dir)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("[SFTP] Failed to list directory '{}': {}", dir, e),
@@ -219,7 +238,13 @@ impl FileTransferClient for SftpClient {
 
     fn mdtm(&mut self, filename: &str) -> Result<chrono::NaiveDateTime, FtpError> {
         let full_path = self.full_path(filename);
-        let stat = self.sftp.stat(Path::new(&full_path)).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+        let stat = sftp.stat(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("[SFTP] Failed to stat file '{}': {}", filename, e),
@@ -247,7 +272,13 @@ impl FileTransferClient for SftpClient {
 
     fn size(&mut self, filename: &str) -> Result<usize, FtpError> {
         let full_path = self.full_path(filename);
-        let stat = self.sftp.stat(Path::new(&full_path)).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+        let stat = sftp.stat(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("[SFTP] Failed to stat file '{}': {}", filename, e),
@@ -261,7 +292,13 @@ impl FileTransferClient for SftpClient {
         F: FnMut(&mut dyn Read) -> Result<D, FtpError>,
     {
         let full_path = self.full_path(filename);
-        let mut file = self.sftp.open(Path::new(&full_path)).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+        let mut file = sftp.open(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("[SFTP] Failed to open file '{}': {}", filename, e),
@@ -277,7 +314,13 @@ impl FileTransferClient for SftpClient {
         reader: &mut R,
     ) -> Result<u64, FtpError> {
         let full_path = self.full_path(filename);
-        let mut file = self.sftp.create(Path::new(&full_path)).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+        let mut file = sftp.create(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("[SFTP] Failed to create file '{}': {}", filename, e),
@@ -290,7 +333,13 @@ impl FileTransferClient for SftpClient {
     fn rename(&mut self, from: &str, to: &str) -> Result<(), FtpError> {
         let from_path = self.full_path(from);
         let to_path = self.full_path(to);
-        self.sftp.rename(Path::new(&from_path), Path::new(&to_path), None).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+        sftp.rename(Path::new(&from_path), Path::new(&to_path), None).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("[SFTP] Failed to rename '{}' to '{}': {}", from, to, e),
@@ -300,7 +349,13 @@ impl FileTransferClient for SftpClient {
 
     fn rm(&mut self, filename: &str) -> Result<(), FtpError> {
         let full_path = self.full_path(filename);
-        self.sftp.unlink(Path::new(&full_path)).map_err(|e| {
+        let sftp = self.sftp.as_ref().ok_or_else(|| {
+            FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "[SFTP] SFTP channel not initialized - login() not called",
+            ))
+        })?;
+        sftp.unlink(Path::new(&full_path)).map_err(|e| {
             FtpError::ConnectionError(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("[SFTP] Failed to delete file '{}': {}", filename, e),
