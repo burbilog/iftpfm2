@@ -2,6 +2,22 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.8] - 2026-02-06
+
+### Changed
+- **Improved `make` usage message** - formatted output with clear sections
+  - Build targets, Test targets, and Other targets now properly categorized
+  - Each target includes a brief description
+  - Better readability with aligned columns
+
+### Tested
+- All 34 unit tests pass
+- Docker integration tests now included in main `make test` target with availability check
+- `test_sftp_docker.sh` - SFTP password authentication
+- `test_sftp_keys_docker.sh` - SFTP SSH key authentication (with and without passphrase)
+
+---
+
 ## [2.4.7] - 2026-02-06
 
 ### Added
