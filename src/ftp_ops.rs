@@ -1,5 +1,6 @@
 use crate::config::{Config, Protocol};
 use crate::logging::{log_debug, log_with_thread};
+use secrecy::ExposeSecret;
 use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
 use regex::Regex;
@@ -364,7 +365,7 @@ pub fn transfer_files(
         &config.ip_address_from,
         config.port_from,
         &config.login_from,
-        config.password_from.as_deref(),
+        config.password_from.as_ref().map(|s| s.expose_secret().as_str()),
         config.keyfile_from.as_deref(),
         &config.path_from,
         timeout,
@@ -385,7 +386,7 @@ pub fn transfer_files(
         &config.ip_address_to,
         config.port_to,
         &config.login_to,
-        config.password_to.as_deref(),
+        config.password_to.as_ref().map(|s| s.expose_secret().as_str()),
         config.keyfile_to.as_deref(),
         &config.path_to,
         timeout,
@@ -718,6 +719,7 @@ mod tests {
     use crate::config::Protocol;
     use crate::shutdown::{request_shutdown, reset_shutdown_for_tests};
     use serial_test::serial;
+    use secrecy::Secret;
 
     #[test]
     #[serial]
@@ -732,14 +734,14 @@ mod tests {
             ip_address_from: "127.0.0.1".to_string(),
             port_from: 21,
             login_from: "test".to_string(),
-            password_from: Some("test".to_string()),
+            password_from: Some(Secret::new("test".to_string())),
             keyfile_from: None,
             path_from: "/test/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
             port_to: 21,
             login_to: "test".to_string(),
-            password_to: Some("test".to_string()),
+            password_to: Some(Secret::new("test".to_string())),
             keyfile_to: None,
             path_to: "/test/".to_string(),
             proto_to: Protocol::Ftp,
@@ -765,14 +767,14 @@ mod tests {
             ip_address_from: "127.0.0.1".to_string(),
             port_from: 21,
             login_from: "test".to_string(),
-            password_from: Some("test".to_string()),
+            password_from: Some(Secret::new("test".to_string())),
             keyfile_from: None,
             path_from: "/test/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "127.0.0.2".to_string(),
             port_to: 21,
             login_to: "test".to_string(),
-            password_to: Some("test".to_string()),
+            password_to: Some(Secret::new("test".to_string())),
             keyfile_to: None,
             path_to: "/test/".to_string(),
             proto_to: Protocol::Ftp,

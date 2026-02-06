@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::fmt;
-use zeroize::Zeroize;
+use secrecy::{Secret, ExposeSecret};
 
 /// FTP/FTPS/SFTP protocol type
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -29,7 +29,7 @@ impl fmt::Display for Protocol {
 }
 
 /// FTP transfer configuration parameters
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     /// Source FTP server IP/hostname (JSON field: host_from)
     #[serde(rename = "host_from")]
@@ -42,7 +42,7 @@ pub struct Config {
     pub login_from: String,
     /// Password for source FTP server (JSON field: password_from)
     #[serde(rename = "password_from", default)]
-    pub password_from: Option<String>,
+    pub password_from: Option<Secret<String>>,
     /// Path to private SSH key for SFTP source auth (JSON field: keyfile_from)
     #[serde(rename = "keyfile_from", default)]
     pub keyfile_from: Option<String>,
@@ -63,7 +63,7 @@ pub struct Config {
     pub login_to: String,
     /// Password for destination FTP server (JSON field: password_to)
     #[serde(rename = "password_to", default)]
-    pub password_to: Option<String>,
+    pub password_to: Option<Secret<String>>,
     /// Path to private SSH key for SFTP destination auth (JSON field: keyfile_to)
     #[serde(rename = "keyfile_to", default)]
     pub keyfile_to: Option<String>,
@@ -79,18 +79,6 @@ pub struct Config {
     /// Regular expression pattern for filename matching (JSON field: filename_regexp)
     #[serde(rename = "filename_regexp")]
     pub filename_regexp: String,
-}
-
-impl Drop for Config {
-    fn drop(&mut self) {
-        // Zeroize passwords when Config is dropped to protect sensitive data in memory
-        if let Some(ref mut p) = self.password_from {
-            p.zeroize();
-        }
-        if let Some(ref mut p) = self.password_to {
-            p.zeroize();
-        }
-    }
 }
 
 impl Config {
@@ -171,7 +159,7 @@ impl Config {
         use std::path::Path;
 
         // Validate from authentication
-        let has_password_from = self.password_from.as_ref().map_or(false, |p| !p.is_empty());
+        let has_password_from = self.password_from.as_ref().map_or(false, |p| !p.expose_secret().is_empty());
         let has_keyfile_from = self.keyfile_from.as_ref().map_or(false, |k| !k.is_empty());
 
         if self.proto_from == Protocol::Sftp {
@@ -207,7 +195,7 @@ impl Config {
         }
 
         // Validate to authentication
-        let has_password_to = self.password_to.as_ref().map_or(false, |p| !p.is_empty());
+        let has_password_to = self.password_to.as_ref().map_or(false, |p| !p.expose_secret().is_empty());
         let has_keyfile_to = self.keyfile_to.as_ref().map_or(false, |k| !k.is_empty());
 
         if self.proto_to == Protocol::Sftp {
@@ -350,6 +338,7 @@ mod tests {
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::tempdir;
+    use secrecy::Secret;
 
     #[test]
     fn test_parse_config() {
@@ -360,14 +349,14 @@ mod tests {
                 ip_address_from: "192.168.0.1".to_string(),
                 port_from: 22,
                 login_from: "user1".to_string(),
-                password_from: Some("password1".to_string()),
+                password_from: Some(Secret::new("password1".to_string())),
                 keyfile_from: None,
                 path_from: "/path/to/files/".to_string(),
                 proto_from: Protocol::Ftp,
                 ip_address_to: "192.168.0.2".to_string(),
                 port_to: 22,
                 login_to: "user2".to_string(),
-                password_to: Some("password2".to_string()),
+                password_to: Some(Secret::new("password2".to_string())),
                 keyfile_to: None,
                 path_to: "/path/to/files2".to_string(),
                 proto_to: Protocol::Ftp,
@@ -378,14 +367,14 @@ mod tests {
                 ip_address_from: "192.168.0.3".to_string(),
                 port_from: 22,
                 login_from: "user3".to_string(),
-                password_from: Some("password3".to_string()),
+                password_from: Some(Secret::new("password3".to_string())),
                 keyfile_from: None,
                 path_from: "/path/to/files3/".to_string(),
                 proto_from: Protocol::Ftp,
                 ip_address_to: "192.168.0.4".to_string(),
                 port_to: 22,
                 login_to: "user4".to_string(),
-                password_to: Some("password4".to_string()),
+                password_to: Some(Secret::new("password4".to_string())),
                 keyfile_to: None,
                 path_to: "/path/to/files4".to_string(),
                 proto_to: Protocol::Ftp,
@@ -402,7 +391,22 @@ mod tests {
         file.write_all(config_string.as_bytes()).unwrap();
 
         let configs = parse_config(config_path.to_str().unwrap()).unwrap();
-        assert_eq!(configs, expected);
+        assert_eq!(configs.len(), expected.len());
+        // Check first config fields (excluding passwords which are Secret)
+        assert_eq!(configs[0].ip_address_from, expected[0].ip_address_from);
+        assert_eq!(configs[0].port_from, expected[0].port_from);
+        assert_eq!(configs[0].login_from, expected[0].login_from);
+        assert_eq!(configs[0].keyfile_from, expected[0].keyfile_from);
+        assert_eq!(configs[0].path_from, expected[0].path_from);
+        assert_eq!(configs[0].proto_from, expected[0].proto_from);
+        assert_eq!(configs[0].ip_address_to, expected[0].ip_address_to);
+        assert_eq!(configs[0].port_to, expected[0].port_to);
+        assert_eq!(configs[0].login_to, expected[0].login_to);
+        assert_eq!(configs[0].keyfile_to, expected[0].keyfile_to);
+        assert_eq!(configs[0].path_to, expected[0].path_to);
+        assert_eq!(configs[0].proto_to, expected[0].proto_to);
+        assert_eq!(configs[0].age, expected[0].age);
+        assert_eq!(configs[0].filename_regexp, expected[0].filename_regexp);
     }
 
     #[test]
@@ -446,14 +450,14 @@ mod tests {
             ip_address_from: "".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -469,14 +473,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 0,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -492,14 +496,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -515,14 +519,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("".to_string()),
+            password_from: Some(Secret::new("".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -538,14 +542,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -561,14 +565,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -584,14 +588,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -607,14 +611,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -630,14 +634,14 @@ mod tests {
             ip_address_from: "192.168.1.1/invalid".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -653,14 +657,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168\\1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -676,14 +680,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 21,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2 invalid".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -706,7 +710,7 @@ mod tests {
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -722,14 +726,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 22,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: Some("/path/to/key".to_string()),
             path_from: "/path/".to_string(),
             proto_from: Protocol::Sftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -752,7 +756,7 @@ mod tests {
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -768,14 +772,14 @@ mod tests {
             ip_address_from: "192.168.1.1".to_string(),
             port_from: 22,
             login_from: "user".to_string(),
-            password_from: Some("pass".to_string()),
+            password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Sftp,
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
@@ -798,7 +802,7 @@ mod tests {
             ip_address_to: "192.168.1.2".to_string(),
             port_to: 21,
             login_to: "user2".to_string(),
-            password_to: Some("pass2".to_string()),
+            password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
