@@ -360,48 +360,6 @@ mod tests {
     fn test_parse_config() {
         let config_string = r#"{"host_from":"192.168.0.1","port_from":22,"login_from":"user1","password_from":"password1","path_from":"/path/to/files/","host_to":"192.168.0.2","port_to":22,"login_to":"user2","password_to":"password2","path_to":"/path/to/files2","age":30,"filename_regexp":".*"}
 {"host_from":"192.168.0.3","port_from":22,"login_from":"user3","password_from":"password3","path_from":"/path/to/files3/","host_to":"192.168.0.4","port_to":22,"login_to":"user4","password_to":"password4","path_to":"/path/to/files4","age":60,"filename_regexp":".*"}"#;
-        let expected = vec![
-            Config {
-                ip_address_from: "192.168.0.1".to_string(),
-                port_from: 22,
-                login_from: "user1".to_string(),
-                password_from: Some(Secret::new("password1".to_string())),
-                keyfile_from: None,
-                keyfile_pass_from: None,
-                path_from: "/path/to/files/".to_string(),
-                proto_from: Protocol::Ftp,
-                ip_address_to: "192.168.0.2".to_string(),
-                port_to: 22,
-                login_to: "user2".to_string(),
-                password_to: Some(Secret::new("password2".to_string())),
-                keyfile_to: None,
-                keyfile_pass_to: None,
-                path_to: "/path/to/files2".to_string(),
-                proto_to: Protocol::Ftp,
-                age: 30,
-                filename_regexp: ".*".to_string(),
-            },
-            Config {
-                ip_address_from: "192.168.0.3".to_string(),
-                port_from: 22,
-                login_from: "user3".to_string(),
-                password_from: Some(Secret::new("password3".to_string())),
-                keyfile_from: None,
-                keyfile_pass_from: None,
-                path_from: "/path/to/files3/".to_string(),
-                proto_from: Protocol::Ftp,
-                ip_address_to: "192.168.0.4".to_string(),
-                port_to: 22,
-                login_to: "user4".to_string(),
-                password_to: Some(Secret::new("password4".to_string())),
-                keyfile_to: None,
-                keyfile_pass_to: None,
-                path_to: "/path/to/files4".to_string(),
-                proto_to: Protocol::Ftp,
-                age: 60,
-                filename_regexp: ".*".to_string(),
-            },
-        ];
 
         let dir = tempdir().unwrap();
         let mut config_path = PathBuf::from(dir.path());
@@ -411,22 +369,23 @@ mod tests {
         file.write_all(config_string.as_bytes()).unwrap();
 
         let configs = parse_config(config_path.to_str().unwrap()).unwrap();
-        assert_eq!(configs.len(), expected.len());
+        assert_eq!(configs.len(), 2);
+
         // Check first config fields (excluding passwords which are Secret)
-        assert_eq!(configs[0].ip_address_from, expected[0].ip_address_from);
-        assert_eq!(configs[0].port_from, expected[0].port_from);
-        assert_eq!(configs[0].login_from, expected[0].login_from);
-        assert_eq!(configs[0].keyfile_from, expected[0].keyfile_from);
-        assert_eq!(configs[0].path_from, expected[0].path_from);
-        assert_eq!(configs[0].proto_from, expected[0].proto_from);
-        assert_eq!(configs[0].ip_address_to, expected[0].ip_address_to);
-        assert_eq!(configs[0].port_to, expected[0].port_to);
-        assert_eq!(configs[0].login_to, expected[0].login_to);
-        assert_eq!(configs[0].keyfile_to, expected[0].keyfile_to);
-        assert_eq!(configs[0].path_to, expected[0].path_to);
-        assert_eq!(configs[0].proto_to, expected[0].proto_to);
-        assert_eq!(configs[0].age, expected[0].age);
-        assert_eq!(configs[0].filename_regexp, expected[0].filename_regexp);
+        assert_eq!(configs[0].ip_address_from, "192.168.0.1");
+        assert_eq!(configs[0].port_from, 22);
+        assert_eq!(configs[0].login_from, "user1");
+        assert_eq!(configs[0].keyfile_from, None);
+        assert_eq!(configs[0].path_from, "/path/to/files/");
+        assert_eq!(configs[0].proto_from, Protocol::Ftp);
+        assert_eq!(configs[0].ip_address_to, "192.168.0.2");
+        assert_eq!(configs[0].port_to, 22);
+        assert_eq!(configs[0].login_to, "user2");
+        assert_eq!(configs[0].keyfile_to, None);
+        assert_eq!(configs[0].path_to, "/path/to/files2");
+        assert_eq!(configs[0].proto_to, Protocol::Ftp);
+        assert_eq!(configs[0].age, 30);
+        assert_eq!(configs[0].filename_regexp, ".*");
     }
 
     #[test]
@@ -472,7 +431,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -480,7 +439,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -497,7 +456,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -505,7 +464,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -522,7 +481,7 @@ mod tests {
             login_from: "".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -530,7 +489,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -547,7 +506,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -555,7 +514,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -572,7 +531,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -580,7 +539,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -597,7 +556,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -605,7 +564,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 0,
@@ -623,7 +582,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -631,7 +590,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -648,7 +607,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -656,7 +615,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -673,7 +632,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -681,7 +640,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -698,7 +657,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168\\1.2".to_string(),
@@ -706,7 +665,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -723,7 +682,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: Some(Secret::new("pass".to_string())),
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Ftp,
             ip_address_to: "192.168.1.2 invalid".to_string(),
@@ -731,7 +690,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
@@ -748,7 +707,7 @@ mod tests {
             login_from: "user".to_string(),
             password_from: None,
             keyfile_from: None,
-                keyfile_pass_from: None,
+            keyfile_pass_from: None,
             path_from: "/path/".to_string(),
             proto_from: Protocol::Sftp,
             ip_address_to: "192.168.1.2".to_string(),
@@ -756,7 +715,7 @@ mod tests {
             login_to: "user2".to_string(),
             password_to: Some(Secret::new("pass2".to_string())),
             keyfile_to: None,
-                keyfile_pass_to: None,
+            keyfile_pass_to: None,
             path_to: "/path2/".to_string(),
             proto_to: Protocol::Ftp,
             age: 100,
