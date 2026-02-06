@@ -27,6 +27,18 @@ fn connect_and_login(
     insecure_skip_verify: bool,
     server_type: &str, // "SOURCE" or "TARGET" for logging
 ) -> Result<Client, String> {
+    // For FTP/FTPS, password is required (validated during config parsing)
+    // For SFTP with keyfile, password can be None
+    let password_for_login = match proto {
+        Protocol::Sftp if keyfile.is_some() => password.unwrap_or(""),
+        _ => password.ok_or_else(|| {
+            format!(
+                "BUG: Password required for {} but was None (should have been caught during config validation)",
+                proto
+            )
+        })?,
+    };
+
     let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password, keyfile) {
         Ok(c) => c,
         Err(e) => {
@@ -37,7 +49,7 @@ fn connect_and_login(
         }
     };
 
-    if let Err(e) = client.login(login, password.unwrap_or("")) {
+    if let Err(e) = client.login(login, password_for_login) {
         let _ = client.quit();
         return Err(format!(
             "Error logging into {} FTP server {}: {}",
