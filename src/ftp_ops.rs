@@ -622,7 +622,27 @@ pub fn transfer_files(
                                 }
                                 Err(_) => {
                                     // Rename failed, likely because target file exists
-                                    // Delete old file and retry rename
+                                    //
+                                    // RENAME FALLBACK - DATA LOSS RISK:
+                                    // ===================================
+                                    // The FTP protocol does NOT provide an atomic "replace" operation.
+                                    // When the target file exists, we must fall back to a non-atomic sequence:
+                                    //
+                                    // 1. First rename() fails (target file exists)
+                                    // 2. rm() deletes the target file
+                                    // 3. [DATA LOSS WINDOW] If crash/disconnect happens here:
+                                    //    - Temp file (.filename.PID.tmp) remains on server
+                                    //    - Target file is already deleted
+                                    //    - Original source file still exists (not deleted yet)
+                                    // 4. Second rename() completes
+                                    //
+                                    // Known limitation: This is an inherent constraint of the FTP protocol
+                                    // (RFC 3659) which does not define an atomic replace operation.
+                                    // After crashes, orphaned .*.tmp files may remain on the server
+                                    // and require manual cleanup.
+                                    //
+                                    // Alternative protocols like SFTP may have different semantics,
+                                    // but we implement consistent behavior across all protocols.
                                     if ftp_to.rm(filename.as_str()).is_ok() {
                                         let _ = log_with_thread(
                                             format!("Replaced existing file {}", filename),
