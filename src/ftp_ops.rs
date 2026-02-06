@@ -94,6 +94,48 @@ fn verify_final_file(
     }
 }
 
+/// Handle actions after successful rename (verification, logging, optional delete)
+///
+/// Returns true if all post-rename actions completed successfully
+fn handle_successful_rename(
+    ftp_to: &mut Client,
+    ftp_from: &mut Client,
+    filename: &str,
+    file_size: usize,
+    thread_id: usize,
+    delete: bool,
+) -> bool {
+    let final_verified = verify_final_file(ftp_to, filename, file_size, thread_id);
+
+    if final_verified {
+        let _ = log_with_thread(
+            format!("Successful transfer of file {}", filename),
+            Some(thread_id),
+        );
+
+        // Delete source file only after successful transfer and verification
+        if delete {
+            match ftp_from.rm(filename) {
+                Ok(_) => {
+                    let _ = log_with_thread(
+                        format!("Deleted SOURCE file {}", filename),
+                        Some(thread_id),
+                    );
+                }
+                Err(e) => {
+                    let _ = log_with_thread(
+                        format!("Error deleting SOURCE file {}: {}", filename, e),
+                        Some(thread_id),
+                    );
+                }
+            }
+        }
+        true
+    } else {
+        false
+    }
+}
+
 /// Transfers files between FTP/FTPS servers according to configuration
 ///
 /// # Arguments
@@ -551,40 +593,15 @@ pub fn transfer_files(
 
                             match rename_result {
                                 Ok(_) => {
-                                    // Verify final file after rename (MANDATORY)
-                                    let final_verified = verify_final_file(
+                                    if handle_successful_rename(
                                         &mut ftp_to,
+                                        &mut ftp_from,
                                         filename.as_str(),
                                         file_size,
                                         thread_id,
-                                    );
-
-                                    if final_verified {
-                                        let _ = log_with_thread(
-                                            format!("Successful transfer of file {}", filename),
-                                            Some(thread_id),
-                                        );
+                                        delete,
+                                    ) {
                                         successful_transfers += 1;
-                                        // Delete source file only after successful transfer and verification
-                                        if delete {
-                                            match ftp_from.rm(filename.as_str()) {
-                                                Ok(_) => {
-                                                    let _ = log_with_thread(
-                                                        format!("Deleted SOURCE file {}", filename),
-                                                        Some(thread_id),
-                                                    );
-                                                }
-                                                Err(e) => {
-                                                    let _ = log_with_thread(
-                                                        format!(
-                                                            "Error deleting SOURCE file {}: {}",
-                                                            filename, e
-                                                        ),
-                                                        Some(thread_id),
-                                                    );
-                                                }
-                                            }
-                                        }
                                     }
                                 }
                                 Err(_) => {
@@ -599,40 +616,15 @@ pub fn transfer_files(
 
                                     match ftp_to.rename(tmp_filename.as_str(), filename.as_str()) {
                                         Ok(_) => {
-                                            // Verify final file after rename (MANDATORY)
-                                            let final_verified = verify_final_file(
+                                            if handle_successful_rename(
                                                 &mut ftp_to,
+                                                &mut ftp_from,
                                                 filename.as_str(),
                                                 file_size,
                                                 thread_id,
-                                            );
-
-                                            if final_verified {
-                                                let _ = log_with_thread(
-                                                    format!(
-                                                        "Successful transfer of file {}",
-                                                        filename
-                                                    ),
-                                                    Some(thread_id),
-                                                );
+                                                delete,
+                                            ) {
                                                 successful_transfers += 1;
-                                                // Delete source file only after successful transfer and verification
-                                                if delete {
-                                                    match ftp_from.rm(filename.as_str()) {
-                                                        Ok(_) => {
-                                                            let _ = log_with_thread(
-                                                                format!(
-                                                                    "Deleted SOURCE file {}",
-                                                                    filename
-                                                                ),
-                                                                Some(thread_id),
-                                                            );
-                                                        }
-                                                        Err(e) => {
-                                                            let _ = log_with_thread(format!("Error deleting SOURCE file {}: {}", filename, e), Some(thread_id));
-                                                        }
-                                                    }
-                                                }
                                             }
                                         }
                                         Err(e) => {
