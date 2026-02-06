@@ -264,13 +264,9 @@ impl Config {
             ));
         }
 
-        // Validate age
-        if self.age == 0 {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "age cannot be 0"
-            ));
-        }
+        // Validate age - age 0 is valid and disables age filtering
+        // (all files will be transferred regardless of modification time)
+        // Note: age is u64, so negative values are impossible at type level
 
         // Validate regex pattern (already done in parse_config but double-check here)
         if let Err(e) = Regex::new(&self.filename_regexp) {
@@ -615,7 +611,8 @@ mod tests {
             age: 0,
             filename_regexp: ".*".to_string(),
         };
-        assert!(config.validate().is_err());
+        // age 0 is valid and disables age filtering
+        assert!(config.validate().is_ok());
     }
 
     #[test]
