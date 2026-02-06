@@ -78,6 +78,10 @@ fn connect_and_login(
 /// Check if file should be transferred based on age and regex
 ///
 /// Returns Some(file_size) if file should be transferred, None if should skip
+///
+/// # Age checking behavior
+/// - `min_age_seconds == 0`: Age checking is disabled, all files pass age check
+/// - `min_age_seconds > 0`: Only files older than min_age_seconds are transferred
 fn check_file_should_transfer(
     client: &mut Client,
     filename: &str,
@@ -144,8 +148,8 @@ fn check_file_should_transfer(
         }
     };
 
-    // Check age threshold
-    if file_age_seconds < min_age_seconds {
+    // Check age threshold (age == 0 means disable age checking)
+    if min_age_seconds > 0 && file_age_seconds < min_age_seconds {
         let _ = log_with_thread(
             format!(
                 "Skipping file {}, it is {} seconds old, less than specified age {} seconds",
