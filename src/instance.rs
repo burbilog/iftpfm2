@@ -15,6 +15,42 @@ use std::sync::Mutex;
 /// Global storage for the socket listener thread join handle
 static LISTENER_HANDLE: Lazy<Mutex<Option<thread::JoinHandle<()>>>> = Lazy::new(|| Mutex::new(None));
 
+/// Returns the user-specific runtime directory for lock files
+///
+/// Priority order:
+/// 1. $XDG_RUNTIME_DIR (if set, e.g., /run/user/1000/)
+/// 2. /tmp (fallback, with UID suffix added to filename)
+fn get_runtime_dir() -> String {
+    std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| "/tmp".to_string())
+}
+
+/// Returns the socket and PID file paths for this user
+///
+/// Paths are user-isolated:
+/// - With XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR/iftpfm2.sock
+/// - Without XDG_RUNTIME_DIR: /tmp/iftpfm2_<uid>.sock
+fn get_lock_paths() -> (String, String) {
+    let runtime_dir = get_runtime_dir();
+    let program_name = crate::PROGRAM_NAME;
+
+    // Check if we're using XDG_RUNTIME_DIR (already user-isolated)
+    // vs /tmp (needs UID suffix)
+    if runtime_dir != "/tmp" {
+        (
+            format!("{}/{}.sock", runtime_dir, program_name),
+            format!("{}/{}.pid", runtime_dir, program_name),
+        )
+    } else {
+        // Fallback: add UID to filename for user isolation
+        let uid = unsafe { libc::getuid() };
+        (
+            format!("/tmp/{}_{}.sock", program_name, uid),
+            format!("/tmp/{}_{}.pid", program_name, uid),
+        )
+    }
+}
+
 /// Global storage for the lock file handle (kept locked for program lifetime)
 static LOCK_FILE_HANDLE: Lazy<Mutex<Option<std::fs::File>>> = Lazy::new(|| Mutex::new(None));
 
@@ -123,8 +159,7 @@ fn signal_process_to_terminate(socket_path: &str, grace_seconds: u64) -> io::Res
 /// # Panics
 /// If signal handler registration fails
 pub fn check_single_instance(grace_seconds: u64) -> io::Result<()> {
-    let socket_path = format!("/tmp/{}.sock", crate::PROGRAM_NAME);
-    let pid_path = format!("/tmp/{}.pid", crate::PROGRAM_NAME);
+    let (socket_path, pid_path) = get_lock_paths();
 
     // ATOMIC: Try to acquire exclusive lock on PID file
     // This is the critical race-condition-free operation
@@ -276,13 +311,12 @@ pub fn join_listener_thread() {
 /// Cleans up single instance lock files
 ///
 /// Removes:
-/// - Unix domain socket (/tmp/{PROGRAM_NAME}.sock)
-/// - PID file (/tmp/{PROGRAM_NAME}.pid)
+/// - Unix domain socket ($XDG_RUNTIME_DIR/{PROGRAM_NAME}.sock OR /tmp/{PROGRAM_NAME}_{uid}.sock)
+/// - PID file ($XDG_RUNTIME_DIR/{PROGRAM_NAME}.pid OR /tmp/{PROGRAM_NAME}_{uid}.pid)
 ///
 /// Called automatically on program exit (e.g., via scopeguard in main)
 pub fn cleanup_lock_file() {
-    let socket_path = format!("/tmp/{}.sock", crate::PROGRAM_NAME);
-    let pid_path = format!("/tmp/{}.pid", crate::PROGRAM_NAME);
+    let (socket_path, pid_path) = get_lock_paths();
 
     let _ = log(&format!("Cleaning up lock files: {} and {}", socket_path, pid_path));
 
@@ -312,6 +346,29 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_get_lock_paths_with_xdg_runtime_dir() {
+        // Test with XDG_RUNTIME_DIR set
+        temp_env::with_var("XDG_RUNTIME_DIR", Some("/run/user/1000"), || {
+            let (socket_path, pid_path) = get_lock_paths();
+            assert_eq!(socket_path, "/run/user/1000/iftpfm2.sock");
+            assert_eq!(pid_path, "/run/user/1000/iftpfm2.pid");
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_lock_paths_without_xdg_runtime_dir() {
+        // Test without XDG_RUNTIME_DIR (should use /tmp with UID suffix)
+        temp_env::with_var_unset("XDG_RUNTIME_DIR", || {
+            let (socket_path, pid_path) = get_lock_paths();
+            let uid = unsafe { libc::getuid() };
+            assert_eq!(socket_path, format!("/tmp/iftpfm2_{}.sock", uid));
+            assert_eq!(pid_path, format!("/tmp/iftpfm2_{}.pid", uid));
+        });
+    }
+
+    #[test]
+    #[serial]
     fn test_cleanup_lock_file() {
         // Create temporary directory for testing
         let dir = tempdir().unwrap();
@@ -326,10 +383,10 @@ mod tests {
         assert!(socket_path.exists());
         assert!(pid_path.exists());
 
-        // Note: cleanup_lock_file uses hardcoded paths based on PROGRAM_NAME
-        // so we can't directly test it with custom paths.
+        // Note: cleanup_lock_file uses paths from get_lock_paths()
+        // which are based on PROGRAM_NAME and environment.
         // This test verifies the concept - in a real scenario, we'd need to
-        // mock PROGRAM_NAME or test the actual paths.
+        // mock the environment or test the actual paths.
     }
 
     #[test]

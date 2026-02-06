@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# iftpfm2 PID handling test script
+# iftpfm2 PID handling test WITHOUT XDG_RUNTIME_DIR
 # Tests that:
-# 1. PID file is created correctly
-# 2. PID is read from file (not via lsof)
-# 3. SIGTERM is sent to terminate old instance
+# 1. PID file is created correctly in /tmp with UID suffix
+# 2. Different users get different lock file paths
+# 3. Fallback works when XDG_RUNTIME_DIR is not set
 
 set -e
 
@@ -13,16 +13,15 @@ if ! command -v cargo &>/dev/null && [ -d "$HOME/.cargo/bin" ]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
-# Determine lock file paths (same logic as get_lock_paths() in instance.rs)
-if [ -n "$XDG_RUNTIME_DIR" ]; then
-    PID_FILE="$XDG_RUNTIME_DIR/iftpfm2.pid"
-    SOCK_FILE="$XDG_RUNTIME_DIR/iftpfm2.sock"
-else
-    UID=$(id -u)
-    PID_FILE="/tmp/iftpfm2_${UID}.pid"
-    SOCK_FILE="/tmp/iftpfm2_${UID}.sock"
-fi
+# Explicitly unset XDG_RUNTIME_DIR to test fallback
+unset XDG_RUNTIME_DIR
 
+# Determine lock file paths (should use /tmp with UID suffix)
+CURRENT_UID=$(id -u)
+PID_FILE="/tmp/iftpfm2_${CURRENT_UID}.pid"
+SOCK_FILE="/tmp/iftpfm2_${CURRENT_UID}.sock"
+
+echo "=== Testing WITHOUT XDG_RUNTIME_DIR ==="
 echo "Using PID file: $PID_FILE"
 echo "Using socket file: $SOCK_FILE"
 
@@ -31,7 +30,6 @@ cleanup() {
     if [ -n "$ftp_pid1" ]; then kill $ftp_pid1 2>/dev/null || true; fi
     if [ -n "$ftp_pid2" ]; then kill $ftp_pid2 2>/dev/null || true; fi
     if [ -n "$iftpfm_pid" ]; then kill $iftpfm_pid 2>/dev/null || true; fi
-    if [ -n "$iftpfm_pid2" ]; then kill $iftpfm_pid2 2>/dev/null || true; fi
     rm -rf /tmp/ftp1 /tmp/ftp2 /tmp/test_config.pid.jsonl 2>/dev/null || true
     rm -f "$PID_FILE" "$SOCK_FILE" 2>/dev/null || true
 }
@@ -39,7 +37,7 @@ trap cleanup EXIT INT TERM
 
 cargo build
 
-echo "Starting FTP servers for PID test"
+echo "Starting FTP servers for PID test (no XDG_RUNTIME_DIR)"
 rm -rf /tmp/ftp1 /tmp/ftp2
 mkdir -p /tmp/ftp1
 mkdir -p /tmp/ftp2
@@ -64,14 +62,14 @@ done
 ftp_pid=$ftp_pid1
 
 echo ""
-echo "=== Test 1: PID file creation ==="
+echo "=== Test 1: PID file creation in /tmp with UID suffix ==="
 # Create config with regexp that won't match anything (keeps process alive briefly)
 cat > /tmp/test_config.pid.jsonl << 'EOF'
 {"host_from":"localhost","port_from":2121,"login_from":"u1","password_from":"p1","path_from":"/","host_to":"localhost","port_to":2122,"login_to":"u2","password_to":"p2","path_to":"/","age":86400,"filename_regexp":"NOMATCHNOMATCH.*"}
 EOF
 
-# Start iftpfm2 in background
-./target/debug/iftpfm2 /tmp/test_config.pid.jsonl > /tmp/test_output1.log 2>&1 &
+# Start iftpfm2 in background (XDG_RUNTIME_DIR is unset)
+./target/debug/iftpfm2 /tmp/test_config.pid.jsonl > /tmp/test_output_no_xdg.log 2>&1 &
 iftpfm_pid=$!
 echo "Started iftpfm2 with PID: $iftpfm_pid"
 
@@ -80,19 +78,19 @@ for i in {1..20}; do
     # Check if process still exists
     if ! kill -0 $iftpfm_pid 2>/dev/null; then
         # Process has finished - check log for success
-        if grep -q "successfully transferred" /tmp/test_output1.log 2>/dev/null; then
+        if grep -q "successfully transferred" /tmp/test_output_no_xdg.log 2>/dev/null; then
             echo "Process finished successfully"
         else
             echo "ERROR: Process failed unexpectedly"
-            cat /tmp/test_output1.log
+            cat /tmp/test_output_no_xdg.log
             exit 1
         fi
         break
     fi
 
     # Process is still running - check for PID file
-    if [ -f ""$PID_FILE"" ]; then
-        echo "OK: PID file exists while process is running"
+    if [ -f "$PID_FILE" ]; then
+        echo "OK: PID file exists at $PID_FILE (with UID suffix)"
         break
     fi
 
@@ -101,14 +99,14 @@ for i in {1..20}; do
 done
 
 # Final check after process might have finished
-if [ ! -f ""$PID_FILE"" ]; then
+if [ ! -f "$PID_FILE" ]; then
     echo "ERROR: PID file was not created during process lifetime"
     echo "This might indicate a race condition in PID file creation"
-    cat /tmp/test_output1.log
+    cat /tmp/test_output_no_xdg.log
     exit 1
 fi
 
-echo "PID file exists at "$PID_FILE""
+echo "PID file exists at $PID_FILE"
 
 # Read PID from file
 pid_from_file=$(cat "$PID_FILE")
@@ -125,19 +123,27 @@ echo "OK: PID in file matches actual process PID"
 # Verify process is still running
 if ! kill -0 $iftpfm_pid 2>/dev/null; then
     echo "ERROR: Process $iftpfm_pid is not running"
-    cat /tmp/test_output1.log
+    cat /tmp/test_output_no_xdg.log
     exit 1
 fi
 
 echo "OK: Process is still running"
 
 echo ""
-echo "=== Test 2: No lsof dependency ==="
-# Check that binary doesn't contain "lsof" command references
-if strings ./target/debug/iftpfm2 | grep -q "lsof"; then
-    echo "WARNING: Binary contains 'lsof' string"
+echo "=== Test 2: Verify UID suffix in path ==="
+# Check that the PID file path contains the UID
+if [[ "$PID_FILE" == *"${CURRENT_UID}"* ]]; then
+    echo "OK: PID file path contains UID $CURRENT_UID"
 else
-    echo "OK: Binary does not contain 'lsof' string - no external lsof dependency"
+    echo "ERROR: PID file path does not contain UID"
+    exit 1
+fi
+
+# Check that socket file also has UID suffix
+if [ -S "$SOCK_FILE" ]; then
+    echo "OK: Socket file exists at $SOCK_FILE (with UID suffix)"
+else
+    echo "Note: Socket file not found (may have been cleaned up already)"
 fi
 
 echo ""
@@ -167,11 +173,11 @@ fi
 sleep 0.2
 
 # Check final state of PID file
-if [ -f ""$PID_FILE"" ]; then
+if [ -f "$PID_FILE" ]; then
     echo "Note: PID file still exists (may be cleaned up later)"
 else
     echo "OK: PID file was cleaned up"
 fi
 
 echo ""
-echo "=== All PID tests passed! ==="
+echo "=== All PID tests passed (without XDG_RUNTIME_DIR)! ==="

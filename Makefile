@@ -1,6 +1,6 @@
 
 all:
-	@echo usage: make debug or make release or make install or make test or make test-sftp or make test-temp or make test-pid or make cloc
+	@echo usage: make debug or make release or make install or make test or make test-sftp or make test-temp or make test-pid or make test-pid-no-xdg or make cloc
 
 # install into ~/.cargo/bin
 install: release
@@ -25,6 +25,7 @@ test:
 	./test_ftps.sh
 	./test_temp_dir.sh
 	./test_pid.sh
+	./test_pid_no_xdg.sh
 	./test_ram_threshold.sh
 
 # run SFTP tests with Docker (separate target, not included in main test target)
@@ -41,6 +42,11 @@ test-temp:
 test-pid:
 	cargo build
 	./test_pid.sh
+
+# run PID handling test WITHOUT XDG_RUNTIME_DIR (included in main test target)
+test-pid-no-xdg:
+	cargo build
+	./test_pid_no_xdg.sh
 
 # generate and install rust documentation (always rebuilds)
 .PHONY: doc
