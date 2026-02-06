@@ -18,9 +18,9 @@ if [ -n "$XDG_RUNTIME_DIR" ]; then
     PID_FILE="$XDG_RUNTIME_DIR/iftpfm2.pid"
     SOCK_FILE="$XDG_RUNTIME_DIR/iftpfm2.sock"
 else
-    UID=$(id -u)
-    PID_FILE="/tmp/iftpfm2_${UID}.pid"
-    SOCK_FILE="/tmp/iftpfm2_${UID}.sock"
+    CURRENT_UID=$(id -u)
+    PID_FILE="/tmp/iftpfm2_${CURRENT_UID}.pid"
+    SOCK_FILE="/tmp/iftpfm2_${CURRENT_UID}.sock"
 fi
 
 echo "Using PID file: $PID_FILE"
