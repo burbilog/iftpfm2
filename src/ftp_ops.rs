@@ -516,8 +516,18 @@ pub fn transfer_files(
     );
 
     // Get the list of files in the source directory
+    let _ = log_with_thread(
+        format!("Getting file list from SOURCE {}...", config.proto_from),
+        Some(thread_id),
+    );
     let file_list = match ftp_from.nlst(None) {
-        Ok(list) => list,
+        Ok(list) => {
+            let _ = log_with_thread(
+                format!("Got {} files from SOURCE", list.len()),
+                Some(thread_id),
+            );
+            list
+        }
         Err(e) => {
             let _ = log_with_thread(
                 format!("Error getting file list from SOURCE FTP server: {}", e),
