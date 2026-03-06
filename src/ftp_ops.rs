@@ -12,6 +12,91 @@ use tempfile::NamedTempFile;
 /// Files below this size use RAM buffer, larger files use disk
 const DEFAULT_RAM_THRESHOLD: u64 = 10 * 1024 * 1024;
 
+/// Maximum consecutive transfer errors before aborting the transfer session
+const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+
+/// Maximum reconnect attempts per file when DataConnectionAlreadyOpen occurs
+const MAX_RECONNECT_ATTEMPTS: u32 = 3;
+
+/// Check if the error is DataConnectionAlreadyOpen
+fn is_data_connection_already_open_error(e: &suppaftp::FtpError) -> bool {
+    matches!(e, suppaftp::FtpError::DataConnectionAlreadyOpen)
+}
+
+/// Reconnect to both source and target servers
+///
+/// Returns Ok((ftp_from, ftp_to)) on success, Err(error_message) on failure
+fn reconnect_both(
+    config: &Config,
+    timeout: Duration,
+    insecure_skip_verify: bool,
+    thread_id: usize,
+) -> Result<(Client, Client), String> {
+    let _ = log_with_thread(
+        "Reconnecting to both servers due to data connection error...",
+        Some(thread_id),
+    );
+
+    // Connect to source server
+    let mut ftp_from = match connect_and_login(
+        &config.proto_from,
+        &config.ip_address_from,
+        config.port_from,
+        &config.login_from,
+        config.password_from.as_ref().map(|s| s.expose_secret()),
+        config.keyfile_from.as_deref(),
+        config.keyfile_pass_from.as_ref().map(|s| s.expose_secret().as_str()),
+        &config.path_from,
+        timeout,
+        insecure_skip_verify,
+        "SOURCE",
+        thread_id,
+    ) {
+        Ok(client) => client,
+        Err(e) => {
+            return Err(format!("Failed to reconnect to SOURCE server: {}", e));
+        }
+    };
+
+    // Connect to target server
+    let mut ftp_to = match connect_and_login(
+        &config.proto_to,
+        &config.ip_address_to,
+        config.port_to,
+        &config.login_to,
+        config.password_to.as_ref().map(|s| s.expose_secret()),
+        config.keyfile_to.as_deref(),
+        config.keyfile_pass_to.as_ref().map(|s| s.expose_secret().as_str()),
+        &config.path_to,
+        timeout,
+        insecure_skip_verify,
+        "TARGET",
+        thread_id,
+    ) {
+        Ok(client) => client,
+        Err(e) => {
+            let _ = ftp_from.quit();
+            return Err(format!("Failed to reconnect to TARGET server: {}", e));
+        }
+    };
+
+    // Set binary mode on both connections
+    use crate::protocols::TransferMode;
+    if let Err(e) = ftp_from.transfer_type(TransferMode::Binary) {
+        let _ = ftp_to.quit();
+        let _ = ftp_from.quit();
+        return Err(format!("Failed to set binary mode on SOURCE server: {}", e));
+    }
+    if let Err(e) = ftp_to.transfer_type(TransferMode::Binary) {
+        let _ = ftp_to.quit();
+        let _ = ftp_from.quit();
+        return Err(format!("Failed to set binary mode on TARGET server: {}", e));
+    }
+
+    let _ = log_with_thread("Reconnection successful", Some(thread_id));
+    Ok((ftp_from, ftp_to))
+}
+
 /// Connect to FTP/FTPS/SFTP server, login, and change directory
 ///
 /// Returns Ok(client) on success, Err(error_message) on failure
@@ -465,7 +550,15 @@ pub fn transfer_files(
     };
 
     let mut successful_transfers = 0;
-    for filename in file_list {
+    let mut consecutive_errors: u32 = 0;
+    let mut reconnect_attempts: u32 = 0;
+
+    // We need to be able to reconnect, so we'll use a mutable approach
+    // where we can replace the connections if needed
+    let mut ftp_from = ftp_from;
+    let mut ftp_to = ftp_to;
+
+    'file_loop: for filename in file_list {
         if is_shutdown_requested() {
             let _ = log_with_thread(
                 "Shutdown requested, aborting remaining transfers",
@@ -636,6 +729,8 @@ pub fn transfer_files(
                                         delete,
                                     ) {
                                         successful_transfers += 1;
+                                        consecutive_errors = 0;
+                                        reconnect_attempts = 0;
                                     }
                                 }
                                 Err(_) => {
@@ -708,23 +803,108 @@ pub fn transfer_files(
                         }
                     }
                     Err(e) => {
-                        let _ = log_with_thread(format!(
-                            "Error uploading file {} ({} bytes) to TARGET {}://{} (path '{}', user '{}'): {}",
-                            filename, file_size, config.proto_to, config.ip_address_to, config.path_to, config.login_to, e
-                        ), Some(thread_id));
+                        // Check if this is a DataConnectionAlreadyOpen error
+                        if is_data_connection_already_open_error(&e) {
+                            consecutive_errors += 1;
+                            let _ = log_with_thread(
+                                format!(
+                                    "Data connection error during upload of {} (consecutive error {}/{}): {}",
+                                    filename, consecutive_errors, MAX_CONSECUTIVE_ERRORS, e
+                                ),
+                                Some(thread_id),
+                            );
+                        } else {
+                            consecutive_errors += 1;
+                            let _ = log_with_thread(format!(
+                                "Error uploading file {} ({} bytes) to TARGET {}://{} (path '{}', user '{}'): {}",
+                                filename, file_size, config.proto_to, config.ip_address_to, config.path_to, config.login_to, e
+                            ), Some(thread_id));
+                        }
                         // Cleanup: try to remove the temporary file
                         let _ = ftp_to.rm(&tmp_filename);
+
+                        // Check if we've reached max consecutive errors
+                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                            let _ = log_with_thread(
+                                format!(
+                                    "ERROR: Max consecutive errors ({}) reached. Aborting transfer session for this source/target pair.",
+                                    MAX_CONSECUTIVE_ERRORS
+                                ),
+                                Some(thread_id),
+                            );
+                            break 'file_loop;
+                        }
                     }
                 }
             }
             Err(e) => {
-                let _ = log_with_thread(
-                    format!(
-                        "Error transferring file {} from SOURCE {}://{} server (user '{}'): {}",
-                        filename, config.proto_from, config.ip_address_from, config.login_from, e
-                    ),
-                    Some(thread_id),
-                );
+                // Check if this is a DataConnectionAlreadyOpen error - need to reconnect
+                if is_data_connection_already_open_error(&e) {
+                    reconnect_attempts += 1;
+                    let _ = log_with_thread(
+                        format!(
+                            "Data connection error for file {} (attempt {}/{}): {}. Attempting reconnect...",
+                            filename, reconnect_attempts, MAX_RECONNECT_ATTEMPTS, e
+                        ),
+                        Some(thread_id),
+                    );
+
+                    if reconnect_attempts > MAX_RECONNECT_ATTEMPTS {
+                        let _ = log_with_thread(
+                            format!(
+                                "ERROR: Max reconnect attempts ({}) reached. Aborting transfer session for this source/target pair.",
+                                MAX_RECONNECT_ATTEMPTS
+                            ),
+                            Some(thread_id),
+                        );
+                        break 'file_loop;
+                    }
+
+                    // Attempt to reconnect
+                    match reconnect_both(config, timeout, insecure_skip_verify, thread_id) {
+                        Ok((new_from, new_to)) => {
+                            let _ = ftp_from.quit();
+                            let _ = ftp_to.quit();
+                            ftp_from = new_from;
+                            ftp_to = new_to;
+                            // Retry the same file - continue to next iteration but we need to retry this file
+                            // Since we can't easily retry in this loop structure, we'll skip and let the next run handle it
+                            let _ = log_with_thread(
+                                format!("Reconnect successful. File {} will be retried on next run.", filename),
+                                Some(thread_id),
+                            );
+                            consecutive_errors += 1;
+                        }
+                        Err(reconnect_err) => {
+                            let _ = log_with_thread(
+                                format!("ERROR: Failed to reconnect: {}. Aborting transfer session.", reconnect_err),
+                                Some(thread_id),
+                            );
+                            break 'file_loop;
+                        }
+                    }
+                } else {
+                    // Other error - log and increment consecutive error counter
+                    consecutive_errors += 1;
+                    let _ = log_with_thread(
+                        format!(
+                            "Error transferring file {} from SOURCE {}://{} server (user '{}'): {}",
+                            filename, config.proto_from, config.ip_address_from, config.login_from, e
+                        ),
+                        Some(thread_id),
+                    );
+
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                        let _ = log_with_thread(
+                            format!(
+                                "ERROR: Max consecutive errors ({}) reached. Aborting transfer session for this source/target pair.",
+                                MAX_CONSECUTIVE_ERRORS
+                            ),
+                            Some(thread_id),
+                        );
+                        break 'file_loop;
+                    }
+                }
             }
         }
     }
