@@ -195,50 +195,14 @@ impl FileTransferClient for FtpsClient {
         // Get all names from NLST
         let _ = log_with_thread("FTPS: Calling nlst() on stream...".to_string(), None);
         let all_names = self.stream.nlst(path)?;
-        let _ = log_with_thread(format!("FTPS: nlst() returned {} entries, filtering directories...", all_names.len()), None);
+        let _ = log_with_thread(format!("FTPS: nlst() returned {} entries", all_names.len()), None);
 
-        // Filter out directories by checking SIZE (directories return error 550)
-        //
-        // NOTE: This is an O(n) operation where n = number of entries returned by NLST.
-        // Each entry requires a separate SIZE command to distinguish files from directories.
-        // This is a known limitation of the FTP protocol (RFC 3659) which doesn't provide
-        // a way to filter directories in NLST. For large directories, this may be slow.
-        //
-        // Potential optimization: Use MLSD/MLST commands if available (RFC 3659),
-        // which provide type information without extra round-trips.
-        let mut files_only = Vec::new();
-        let mut dir_count = 0;
-        let mut error_count = 0;
-
-        for name in all_names {
-            // Skip . and ..
-            if name == "." || name == ".." {
-                continue;
-            }
-            // Try SIZE - if succeeds, it's a file; if fails, likely a directory
-            match self.stream.size(&name) {
-                Ok(_) => files_only.push(name),
-                Err(_) => {
-                    // Could be a directory or error
-                    dir_count += 1;
-                }
-            }
-
-            // Progress logging every 1000 entries
-            if (files_only.len() + dir_count) % 1000 == 0 {
-                let _ = log_with_thread(
-                    format!("FTPS: Filtering progress: {} files, {} dirs/errors processed",
-                        files_only.len() + dir_count, files_only.len()),
-                    None
-                );
-            }
-        }
-
-        let _ = log_with_thread(
-            format!("FTPS: Filtering complete: {} files, {} dirs/errors (total {} entries)",
-                files_only.len(), dir_count, files_only.len() + dir_count),
-            None
-        );
+        // Filter out . and .. only (no SIZE check - too slow for large directories)
+        // Directories will fail during transfer with appropriate error
+        let files_only: Vec<String> = all_names
+            .into_iter()
+            .filter(|name| name != "." && name != "..")
+            .collect();
 
         Ok(files_only)
     }

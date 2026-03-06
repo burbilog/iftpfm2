@@ -89,25 +89,11 @@ impl FileTransferClient for FtpClient {
         let all_names = self.stream.nlst(path)?;
         let _ = crate::logging::log_with_thread(format!("FTP: nlst() returned {} entries", all_names.len()), None);
 
-        // Filter out directories by checking SIZE (directories return error 550)
-        //
-        // NOTE: This is an O(n) operation where n = number of entries returned by NLST.
-        // Each entry requires a separate SIZE command to distinguish files from directories.
-        // This is a known limitation of the FTP protocol (RFC 3659) which doesn't provide
-        // a way to filter directories in NLST. For large directories, this may be slow.
-        //
-        // Potential optimization: Use MLSD/MLST commands if available (RFC 3659),
-        // which provide type information without extra round-trips.
+        // Filter out . and .. only (no SIZE check - too slow for large directories)
+        // Directories will fail during transfer with appropriate error
         let files_only: Vec<String> = all_names
             .into_iter()
-            .filter(|name| {
-                // Skip . and ..
-                if name == "." || name == ".." {
-                    return false;
-                }
-                // Try SIZE - if succeeds, it's a file; if fails, likely a directory
-                self.stream.size(name).is_ok()
-            })
+            .filter(|name| name != "." && name != "..")
             .collect();
 
         Ok(files_only)
