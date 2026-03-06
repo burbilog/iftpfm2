@@ -2,6 +2,35 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.10] - 2026-03-06
+
+### Fixed
+- **Control connection timeout** - added 60-second read/write timeout on FTP/FTPS control connections
+  - Prevents hanging on commands like QUIT, CWD, NLST when server becomes unresponsive
+  - Applied to both FTP and FTPS protocol implementations
+
+- **DataConnectionAlreadyOpen error handling** - automatic retry with reconnect
+  - When suppaftp returns "Data connection is already open" error, reconnects both servers
+  - Limited to 5 consecutive errors before aborting transfer session
+  - Prevents infinite loops while allowing recovery from transient errors
+
+### Changed
+- **Optimized nlst() performance** - removed O(n) SIZE filtering for directory entries
+  - Previously: each nlst entry required a SIZE command to distinguish files from directories
+  - For 100K+ files this took 14+ minutes (8 seconds per 1000 files)
+  - Now: only filters "." and ".." entries locally, directories fail gracefully during transfer
+  - File listing for 100K+ files now takes ~3 seconds instead of 14+ minutes
+  - Added debug logging for nlst() call timing
+
+### Technical Details
+- The SIZE-based directory filtering was problematic for large directories:
+  - O(n) network round-trips (one SIZE command per entry)
+  - Data connections without timeout could hang indefinitely
+  - suppaftp library doesn't support timeout on data connections
+- Trade-off: directories appear in file list but fail gracefully during transfer
+
+---
+
 ## [2.4.9] - 2026-02-06
 
 ### Fixed
@@ -404,6 +433,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.4.10** - Control connection timeout, DataConnectionAlreadyOpen retry, nlst() O(n) optimization
 - **2.4.2** - Removed lsof/kill dependency, native PID handling via nix crate
 - **2.4.1** - OOM fix with tempfile streaming, custom temp directory, debug logging
 - **2.4.0** - SFTP protocol support, working directory tracking
