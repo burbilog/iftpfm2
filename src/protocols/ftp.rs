@@ -85,7 +85,9 @@ impl FileTransferClient for FtpClient {
 
     fn nlst(&mut self, path: Option<&str>) -> Result<Vec<String>, FtpError> {
         // Get all names from NLST
+        let _ = crate::logging::log_with_thread("FTP: Calling nlst() on stream...".to_string(), None);
         let all_names = self.stream.nlst(path)?;
+        let _ = crate::logging::log_with_thread(format!("FTP: nlst() returned {} entries", all_names.len()), None);
 
         // Filter out directories by checking SIZE (directories return error 550)
         //

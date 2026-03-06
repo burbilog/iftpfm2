@@ -193,7 +193,9 @@ impl FileTransferClient for FtpsClient {
 
     fn nlst(&mut self, path: Option<&str>) -> Result<Vec<String>, FtpError> {
         // Get all names from NLST
+        let _ = log_with_thread("FTPS: Calling nlst() on stream...".to_string(), None);
         let all_names = self.stream.nlst(path)?;
+        let _ = log_with_thread(format!("FTPS: nlst() returned {} entries", all_names.len()), None);
 
         // Filter out directories by checking SIZE (directories return error 550)
         //
