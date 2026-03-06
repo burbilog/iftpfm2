@@ -12,6 +12,9 @@ use suppaftp::{RustlsConnector, RustlsFtpStream, types::Mode};
 use crate::logging::log_with_thread;
 use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
 
+/// Default timeout for read/write operations on control connection
+const DEFAULT_RW_TIMEOUT: Duration = Duration::from_secs(60);
+
 // Module for insecure certificate verification (for self-signed certs)
 mod danger {
     use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -147,6 +150,14 @@ impl FileTransferClient for FtpsClient {
                     let connector = RustlsConnector::from(tls_config.clone());
                     match secure_stream.into_secure(connector, host) {
                         Ok(mut stream) => {
+                            // Set read/write timeout on the control connection
+                            // This prevents hanging on commands like QUIT, CWD, etc.
+                            let tcp_stream = stream.get_ref();
+                            tcp_stream.set_read_timeout(Some(DEFAULT_RW_TIMEOUT))
+                                .map_err(FtpError::ConnectionError)?;
+                            tcp_stream.set_write_timeout(Some(DEFAULT_RW_TIMEOUT))
+                                .map_err(FtpError::ConnectionError)?;
+
                             // Enable data channel protection (PROT P) for secure data transfer
                             let _ = stream.custom_command("PROT P", &[suppaftp::Status::CommandOk])?;
                             stream.set_mode(Mode::Passive);

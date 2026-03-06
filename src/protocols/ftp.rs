@@ -10,6 +10,9 @@ use suppaftp::FtpStream;
 
 use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
 
+/// Default timeout for read/write operations on control connection
+const DEFAULT_RW_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// FTP client for plain (unencrypted) FTP connections
 pub struct FtpClient {
     stream: FtpStream,
@@ -46,7 +49,16 @@ impl FileTransferClient for FtpClient {
         let mut last_error = None;
         for addr in addrs {
             match FtpStream::connect_timeout(addr, timeout) {
-                Ok(stream) => return Ok(FtpClient { stream }),
+                Ok(stream) => {
+                    // Set read/write timeout on the control connection
+                    // This prevents hanging on commands like QUIT, CWD, etc.
+                    let tcp_stream = stream.get_ref();
+                    tcp_stream.set_read_timeout(Some(DEFAULT_RW_TIMEOUT))
+                        .map_err(FtpError::ConnectionError)?;
+                    tcp_stream.set_write_timeout(Some(DEFAULT_RW_TIMEOUT))
+                        .map_err(FtpError::ConnectionError)?;
+                    return Ok(FtpClient { stream });
+                }
                 Err(e) => last_error = Some(e),
             }
         }
