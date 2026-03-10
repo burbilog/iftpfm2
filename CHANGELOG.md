@@ -2,6 +2,33 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.11] - 2026-03-10
+
+### Added
+- **Thread-local session context** - unique 4-char hex hash for each transfer session
+  - Log format now includes `[Tn] [hash]` prefix for easy correlation of parallel sessions
+  - Works with all protocols: FTP, FTPS, SFTP
+  - `generate_session_hash()` - creates random 4-char hex identifier
+  - `set_session_context()` / `clear_session_context()` - manage thread-local storage
+
+### Changed
+- `log_with_thread()` automatically includes session hash from thread-local storage
+- Session hash is always included when TLS context is set, regardless of explicit thread_id
+- Replaced `eprintln!` with `log_with_thread()` in ftps.rs for consistency
+
+### Example
+```
+Before: 2026-03-10 14:40:46 [T0] Transferring files from ftp://...
+After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
+```
+
+### Tested
+- Added 3 unit tests for TLS context functionality
+- All 37 unit tests pass
+- All integration tests pass
+
+---
+
 ## [2.4.10] - 2026-03-06
 
 ### Fixed
@@ -433,6 +460,7 @@ All notable changes to iftpfm2 will be documented in this file.
 
 ## Version Reference
 
+- **2.4.11** - Thread-local session context for improved log tracing with [Tn] [hash] format
 - **2.4.10** - Control connection timeout, DataConnectionAlreadyOpen retry, nlst() O(n) optimization
 - **2.4.2** - Removed lsof/kill dependency, native PID handling via nix crate
 - **2.4.1** - OOM fix with tempfile streaming, custom temp directory, debug logging
