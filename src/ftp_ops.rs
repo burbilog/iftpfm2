@@ -1,5 +1,5 @@
 use crate::config::{Config, Protocol};
-use crate::logging::{log_debug, log_with_thread};
+use crate::logging::{clear_session_context, generate_session_hash, log_debug, log_with_thread, set_session_context};
 use secrecy::ExposeSecret;
 use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
@@ -423,6 +423,16 @@ pub fn transfer_files(
         let _ = log_with_thread("Shutdown requested, skipping transfer", Some(thread_id));
         return 0;
     }
+
+    // Set up session context for this thread
+    // This allows log_with_thread() calls with None to automatically get the context
+    let session_hash = generate_session_hash();
+    set_session_context(thread_id, session_hash.clone());
+
+    // Use scopeguard to ensure context is cleared on exit (even on panic/early return)
+    let _guard = scopeguard::guard((), |_| {
+        clear_session_context();
+    });
 
     let _ = log_with_thread(
         format!(

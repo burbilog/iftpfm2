@@ -105,8 +105,6 @@ impl FileTransferClient for FtpsClient {
         let tls_config = if config.insecure_skip_verify {
             // SECURITY WARNING: Certificate verification is disabled
             let warning = "⚠️  SECURITY WARNING: TLS certificate verification is DISABLED!";
-            eprintln!("{}", warning);
-            eprintln!("   Connections are vulnerable to man-in-the-middle attacks!");
             let _ = log_with_thread(warning.to_string(), None);
             let _ = log_with_thread("FTPS connections are vulnerable to man-in-the-middle attacks!".to_string(), None);
 
