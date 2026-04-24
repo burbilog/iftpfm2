@@ -30,3 +30,7 @@
 # This is a config line to transfer .csv files via FTPS (with TLS encryption)
 # Use --insecure-skip-verify flag for self-signed certificates
 {"host_from":"ftps.example.com","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/outgoing/","proto_from":"ftps","host_to":"ftps.example.com","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/incoming/","proto_to":"ftps","age":86400,"filename_regexp":".*\\.csv$"}
+
+# This is a config line with timezone offset for a server in Moscow (UTC+3)
+# The source server returns local time in MDTM, so tz_from corrects it to UTC
+{"host_from":"ftp.moscow.local","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/data/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/backup/","age":3600,"filename_regexp":".*","tz_from":"+03:00"}

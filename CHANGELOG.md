@@ -2,6 +2,30 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.12] - 2026-04-24
+
+### Added
+- **Timezone offset support (`tz_from` / `tz_to`)** - configurable timezone for MDTM timestamp correction
+  - FTP servers may return local time instead of UTC in MDTM responses, causing inaccurate age filtering
+  - New config fields: `tz_from`, `tz_to` (default: `"utc"`, backward compatible)
+  - Supported formats: `"utc"`, `"+03:00"`, `"-05:30"`, `"+0300"`, `"+3"`, `"+03"`
+  - `TzOffset` enum in `config.rs` with custom serde deserialization
+  - `naive_datetime_to_utc()` function converts server-local time to UTC before age calculation
+  - SFTP is excluded from tz conversion since its mtime is always a Unix timestamp (UTC)
+  - Invalid values produce clear error messages with line number from `parse_config()`
+
+### Changed
+- `check_file_should_transfer()` now takes `tz_from` and `proto_from` parameters
+- `lib.rs` re-exports `TzOffset` for external use
+
+### Tested
+- 18 new unit tests (12 in config.rs, 6 in ftp_ops.rs)
+- All 62 unit tests pass
+- All 11 integration test scripts pass
+- Backward compatibility verified: JSONL files without `tz_from`/`tz_to` parse as before
+
+---
+
 ## [2.4.11] - 2026-03-10
 
 ### Added
@@ -460,6 +484,7 @@ After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
 
 ## Version Reference
 
+- **2.4.12** - Timezone offset support (tz_from/tz_to) for MDTM timestamp correction
 - **2.4.11** - Thread-local session context for improved log tracing with [Tn] [hash] format
 - **2.4.10** - Control connection timeout, DataConnectionAlreadyOpen retry, nlst() O(n) optimization
 - **2.4.2** - Removed lsof/kill dependency, native PID handling via nix crate

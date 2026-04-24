@@ -130,6 +130,7 @@ cargo doc --open
 7. For each file:
    - Check regex match
    - Get MDTM (modified time)
+   - Convert MDTM to UTC using `tz_from` offset (SFTP skipped — mtime is always UTC)
    - Check file age
    - Get file size via SIZE command to determine storage strategy
    - Transfer via `retr()` → RAM buffer or disk temp file → `put_file()`
@@ -168,8 +169,18 @@ cargo doc --open
 **Config Validation:**
 - All fields validated during parsing (non-empty hosts/logins/passwords/paths, ports > 0, age > 0, valid regex)
 - `proto_from` and `proto_to` default to `Protocol::Ftp` if not specified
+- `tz_from` and `tz_to` default to `TzOffset::Utc` if not specified (backward compatible)
 - For SFTP: either password OR keyfile must be specified (validated in config parsing)
 - Regex pattern validated once during parsing (not re-validated during transfer)
+
+**Timezone Offset (`tz_from` / `tz_to`):**
+- FTP servers may return local time in MDTM responses instead of UTC
+- `TzOffset` enum: `Utc` (default) or `Fixed(i32)` (seconds from UTC)
+- Supported formats: `"utc"`, `"+03:00"`, `"-05:30"`, `"+0300"`, `"+3"`
+- Parsed by `parse_tz_offset()` in `config.rs`, errors include line number via `parse_config()`
+- Conversion applied in `naive_datetime_to_utc()` (`ftp_ops.rs`) using `FixedOffset::from_local_datetime()`
+- SFTP is excluded from tz conversion (mtime is always a Unix timestamp / UTC)
+- `check_file_should_transfer()` takes `tz_from` and `proto_from` parameters to decide whether to apply offset
 
 ## Important Implementation Notes
 
