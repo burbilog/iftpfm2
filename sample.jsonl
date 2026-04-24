@@ -18,6 +18,8 @@
 # proto_to: target protocol - "ftp" (default) or "ftps"
 # age: the age in seconds of the files to transfer, files younger than age seconds are ignored
 # filename_regexp: regular expression pattern to match files in specified source path (string)
+# tz_from: timezone offset for source server MDTM timestamps (default: "utc"). Formats: "+03:00", "-05:30", "+0300", "+3", "utc"
+# tz_to: timezone offset for target server timestamps (default: "utc"). Same formats as tz_from
 
 # This is a config line to transfer all files older than 1 day from 192.168.0.1 to 192.168.0.2
 {"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/to/source/dir/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path/to/target/dir","age":86400,"filename_regexp":".*"}

@@ -1,5 +1,6 @@
-use crate::config::{Config, Protocol};
+use crate::config::{Config, Protocol, TzOffset};
 use crate::logging::{clear_session_context, generate_session_hash, log_debug, log_with_thread, set_session_context};
+use chrono::TimeZone;
 use secrecy::ExposeSecret;
 use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
@@ -163,6 +164,27 @@ fn connect_and_login(
     Ok(client)
 }
 
+/// Convert a NaiveDateTime from the given timezone to UTC
+///
+/// FTP servers may return local time in MDTM responses instead of UTC.
+/// This function applies the timezone offset to produce a correct UTC time.
+fn naive_datetime_to_utc(
+    dt: &chrono::NaiveDateTime,
+    tz: &TzOffset,
+) -> chrono::NaiveDateTime {
+    match tz {
+        TzOffset::Utc => *dt,
+        TzOffset::Fixed(secs) => {
+            chrono::FixedOffset::east_opt(*secs)
+                .unwrap()
+                .from_local_datetime(dt)
+                .single()
+                .unwrap()
+                .naive_utc()
+        }
+    }
+}
+
 /// Check if file should be transferred based on age and regex
 ///
 /// Returns Some(file_size) if file should be transferred, None if should skip
@@ -176,6 +198,8 @@ fn check_file_should_transfer(
     min_age_seconds: u64,
     regex: &Regex,
     thread_id: usize,
+    tz_from: &TzOffset,
+    proto_from: &Protocol,
 ) -> Option<usize> {
     // Check regex match
     if !regex.is_match(filename) {
@@ -204,10 +228,18 @@ fn check_file_should_transfer(
         }
     };
 
+    // Apply timezone correction: FTP servers may return local time in MDTM
+    // SFTP mtime is always a Unix timestamp (UTC by definition), so skip conversion
+    let effective_tz = match proto_from {
+        Protocol::Sftp => &TzOffset::Utc,
+        _ => tz_from,
+    };
+    let datetime_utc = naive_datetime_to_utc(&datetime_naive, effective_tz);
+
     // Convert to SystemTime for age calculation
     let modified_system_time = {
-        let secs = datetime_naive.and_utc().timestamp();
-        let nanos = datetime_naive.and_utc().timestamp_subsec_nanos();
+        let secs = datetime_utc.and_utc().timestamp();
+        let nanos = datetime_utc.and_utc().timestamp_subsec_nanos();
         if secs < 0 {
             let _ = log_with_thread(
                 format!(
@@ -594,6 +626,8 @@ pub fn transfer_files(
             config.age,
             &regex,
             thread_id,
+            &config.tz_from,
+            &config.proto_from,
         ) else {
             continue;
         };
@@ -954,7 +988,7 @@ pub fn transfer_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Protocol;
+    use crate::config::{Protocol, TzOffset};
     use crate::shutdown::{request_shutdown, reset_shutdown_for_tests};
     use serial_test::serial;
     use secrecy::Secret;
@@ -987,6 +1021,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
 
         let result = transfer_files(&config, false, 1, None, false, None, None);
@@ -1022,6 +1058,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: r".*\.txt$".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
 
         // This should not panic - regex should compile
@@ -1048,5 +1086,68 @@ mod tests {
             let regex = Regex::new(pattern);
             assert!(regex.is_ok(), "Pattern '{}' should compile", pattern);
         }
+    }
+
+    // ===== naive_datetime_to_utc tests =====
+
+    #[test]
+    fn test_naive_datetime_to_utc_no_conversion() {
+        let dt = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(12, 0, 0).unwrap();
+        // Utc → no change
+        assert_eq!(naive_datetime_to_utc(&dt, &TzOffset::Utc), dt);
+    }
+
+    #[test]
+    fn test_naive_datetime_to_utc_positive_offset() {
+        // Server in +03:00 returned 12:00 → UTC should be 09:00
+        let dt = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(12, 0, 0).unwrap();
+        let result = naive_datetime_to_utc(&dt, &TzOffset::Fixed(10800)); // +03:00
+        let expected = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(9, 0, 0).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_naive_datetime_to_utc_negative_offset() {
+        // Server in -05:00 returned 12:00 → UTC should be 17:00
+        let dt = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(12, 0, 0).unwrap();
+        let result = naive_datetime_to_utc(&dt, &TzOffset::Fixed(-18000)); // -05:00
+        let expected = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(17, 0, 0).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_naive_datetime_to_utc_half_hour_offset() {
+        // India +05:30: server returned 12:00 → UTC should be 06:30
+        let dt = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(12, 0, 0).unwrap();
+        let result = naive_datetime_to_utc(&dt, &TzOffset::Fixed(19800)); // +05:30
+        let expected = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(6, 30, 0).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_naive_datetime_to_utc_date_crossing() {
+        // Server in +05:00 returned 02:00 → UTC should be 21:00 previous day
+        let dt = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+            .and_hms_opt(2, 0, 0).unwrap();
+        let result = naive_datetime_to_utc(&dt, &TzOffset::Fixed(18000)); // +05:00
+        let expected = chrono::NaiveDate::from_ymd_opt(2024, 1, 14).unwrap()
+            .and_hms_opt(21, 0, 0).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_naive_datetime_to_utc_fixed_zero() {
+        let dt = chrono::NaiveDate::from_ymd_opt(2024, 6, 1).unwrap()
+            .and_hms_opt(14, 30, 0).unwrap();
+        // Fixed(0) is same as UTC → no change
+        let result = naive_datetime_to_utc(&dt, &TzOffset::Fixed(0));
+        assert_eq!(result, dt);
     }
 }

@@ -28,6 +28,117 @@ impl fmt::Display for Protocol {
     }
 }
 
+/// Timezone offset for interpreting MDTM timestamps from FTP servers
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TzOffset {
+    /// UTC (no conversion needed)
+    Utc,
+    /// Fixed offset in seconds from UTC (e.g., +10800 = +03:00)
+    Fixed(i32),
+}
+
+impl Default for TzOffset {
+    fn default() -> Self {
+        TzOffset::Utc
+    }
+}
+
+impl fmt::Display for TzOffset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TzOffset::Utc => write!(f, "utc"),
+            TzOffset::Fixed(secs) => {
+                let sign = if *secs >= 0 { '+' } else { '-' };
+                let total = secs.abs();
+                let hours = total / 3600;
+                let minutes = (total % 3600) / 60;
+                write!(f, "{}{:02}:{:02}", sign, hours, minutes)
+            }
+        }
+    }
+}
+
+/// Parse a timezone offset string
+///
+/// Supported formats:
+/// - "utc" (case-insensitive) → Utc
+/// - "+HH:MM", "-HH:MM" → Fixed (e.g., "+03:00" → Fixed(10800))
+/// - "+HHMM", "-HHMM" → Fixed (e.g., "+0300" → Fixed(10800))
+/// - "+H", "+HH", "-H", "-HH" → Fixed (e.g., "+3" → Fixed(10800))
+fn parse_tz_offset(s: &str) -> Result<TzOffset, String> {
+    let s = s.trim();
+    if s.eq_ignore_ascii_case("utc") {
+        return Ok(TzOffset::Utc);
+    }
+    if s.is_empty() {
+        return Err("Invalid timezone offset '': must start with '+' or '-' or be 'utc'".to_string());
+    }
+
+    let (sign, rest) = match s.as_bytes()[0] {
+        b'+' => (1i32, &s[1..]),
+        b'-' => (-1i32, &s[1..]),
+        _ => return Err(format!(
+            "Invalid timezone offset '{}': must start with '+' or '-' or be 'utc'", s
+        )),
+    };
+
+    if rest.is_empty() {
+        return Err(format!(
+            "Invalid timezone offset '{}': expected digits after sign", s
+        ));
+    }
+
+    // Parse hours and optionally minutes
+    let (hours_str, minutes_str) = if rest.contains(':') {
+        let parts: Vec<&str> = rest.split(':').collect();
+        if parts.len() != 2 {
+            return Err(format!("Invalid timezone offset '{}': expected format +HH:MM", s));
+        }
+        (parts[0], Some(parts[1]))
+    } else if rest.len() > 2 {
+        // +HHMM format
+        (&rest[..rest.len()-2], Some(&rest[rest.len()-2..]))
+    } else {
+        // +H or +HH format (no minutes)
+        (rest, None)
+    };
+
+    let hours: i32 = hours_str.parse().map_err(|_| format!(
+        "Invalid timezone offset '{}': invalid hours '{}'", s, hours_str
+    ))?;
+
+    let minutes: i32 = if let Some(ms) = minutes_str {
+        ms.parse().map_err(|_| format!(
+            "Invalid timezone offset '{}': invalid minutes '{}'", s, ms
+        ))?
+    } else {
+        0
+    };
+
+    if hours > 23 || minutes > 59 {
+        return Err(format!(
+            "Invalid timezone offset '{}': hours must be 0-23 and minutes must be 0-59", s
+        ));
+    }
+
+    Ok(TzOffset::Fixed(sign * (hours * 3600 + minutes * 60)))
+}
+
+impl TryFrom<String> for TzOffset {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        parse_tz_offset(&s)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for TzOffset {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.try_into().map_err(serde::de::Error::custom)
+    }
+}
+
 /// FTP transfer configuration parameters
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -85,6 +196,12 @@ pub struct Config {
     /// Regular expression pattern for filename matching (JSON field: filename_regexp)
     #[serde(rename = "filename_regexp")]
     pub filename_regexp: String,
+    /// Timezone offset for source server MDTM timestamps (JSON field: tz_from, default: utc)
+    #[serde(rename = "tz_from", default)]
+    pub tz_from: TzOffset,
+    /// Timezone offset for target server timestamps (JSON field: tz_to, default: utc)
+    #[serde(rename = "tz_to", default)]
+    pub tz_to: TzOffset,
 }
 
 impl Config {
@@ -444,6 +561,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -469,6 +588,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -494,6 +615,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -519,6 +642,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -544,6 +669,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -569,6 +696,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 0,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         // age 0 is valid and disables age filtering
         assert!(config.validate().is_ok());
@@ -595,6 +724,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: "(invalid[".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -620,6 +751,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_ok());
     }
@@ -645,6 +778,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -670,6 +805,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -695,6 +832,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -720,6 +859,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -745,6 +886,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -770,6 +913,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -795,6 +940,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_ok());
     }
@@ -820,6 +967,8 @@ mod tests {
             proto_to: Protocol::Ftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         assert!(config.validate().is_err());
     }
@@ -845,6 +994,8 @@ mod tests {
             proto_to: Protocol::Sftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         // Passphrase without keyfile should fail validation
         assert!(config.validate().is_err());
@@ -873,6 +1024,8 @@ mod tests {
             proto_to: Protocol::Sftp,
             age: 100,
             filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
         };
         // Passphrase with keyfile should pass structural validation
         // (will fail on nonexistent file, but that's a different error)
@@ -882,5 +1035,123 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("does not exist"));
         assert!(!err_msg.contains("passphrase"));
+    }
+
+    // ===== TzOffset tests =====
+
+    #[test]
+    fn test_parse_tz_offset_utc() {
+        assert_eq!(parse_tz_offset("utc").unwrap(), TzOffset::Utc);
+        assert_eq!(parse_tz_offset("UTC").unwrap(), TzOffset::Utc);
+        assert_eq!(parse_tz_offset(" utc ").unwrap(), TzOffset::Utc);
+    }
+
+    #[test]
+    fn test_parse_tz_offset_positive_with_colon() {
+        assert_eq!(parse_tz_offset("+03:00").unwrap(), TzOffset::Fixed(10800));
+    }
+
+    #[test]
+    fn test_parse_tz_offset_negative_with_colon() {
+        assert_eq!(parse_tz_offset("-05:30").unwrap(), TzOffset::Fixed(-19800));
+    }
+
+    #[test]
+    fn test_parse_tz_offset_compact_format() {
+        assert_eq!(parse_tz_offset("+0300").unwrap(), TzOffset::Fixed(10800));
+        assert_eq!(parse_tz_offset("-0530").unwrap(), TzOffset::Fixed(-19800));
+    }
+
+    #[test]
+    fn test_parse_tz_offset_hours_only() {
+        assert_eq!(parse_tz_offset("+3").unwrap(), TzOffset::Fixed(10800));
+        assert_eq!(parse_tz_offset("+03").unwrap(), TzOffset::Fixed(10800));
+        assert_eq!(parse_tz_offset("-5").unwrap(), TzOffset::Fixed(-18000));
+    }
+
+    #[test]
+    fn test_parse_tz_offset_errors() {
+        // Empty string
+        assert!(parse_tz_offset("").is_err());
+        // Invalid string
+        assert!(parse_tz_offset("invalid").is_err());
+        // No sign
+        assert!(parse_tz_offset("03:00").is_err());
+        // Out of range hours
+        assert!(parse_tz_offset("+25:00").is_err());
+        // Out of range minutes
+        assert!(parse_tz_offset("+12:60").is_err());
+        // Garbage values
+        assert!(parse_tz_offset("garbage").is_err());
+        assert!(parse_tz_offset("lol").is_err());
+        assert!(parse_tz_offset("123").is_err());
+    }
+
+    #[test]
+    fn test_tz_offset_serde_with_value() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","tz_from":"+03:00"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.tz_from, TzOffset::Fixed(10800));
+        assert_eq!(config.tz_to, TzOffset::Utc); // default
+    }
+
+    #[test]
+    fn test_tz_offset_serde_default() {
+        // JSON without tz_from/tz_to fields → defaults to Utc
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.tz_from, TzOffset::Utc);
+        assert_eq!(config.tz_to, TzOffset::Utc);
+    }
+
+    #[test]
+    fn test_tz_offset_serde_invalid() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","tz_from":"garbage"}"#;
+        let result = serde_json::from_str::<Config>(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tz_offset_serde_invalid_via_parse_config() {
+        // Garbage in tz_from should produce error with line number
+        let config_string = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","tz_from":"garbage"}"#;
+        let dir = tempdir().unwrap();
+        let mut config_path = PathBuf::from(dir.path());
+        config_path.push("config.jsonl");
+
+        let mut file = File::create(&config_path).unwrap();
+        file.write_all(config_string.as_bytes()).unwrap();
+
+        let result = parse_config(config_path.to_str().unwrap());
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("invalid JSON on line 1"), "Expected line number in error: {}", err_msg);
+        assert!(err_msg.contains("garbage"), "Expected original value in error: {}", err_msg);
+    }
+
+    #[test]
+    fn test_tz_offset_serde_invalid_tz_to_via_parse_config() {
+        // Garbage in tz_to should also produce error with line number
+        let config_string = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","tz_to":"lol"}"#;
+        let dir = tempdir().unwrap();
+        let mut config_path = PathBuf::from(dir.path());
+        config_path.push("config.jsonl");
+
+        let mut file = File::create(&config_path).unwrap();
+        file.write_all(config_string.as_bytes()).unwrap();
+
+        let result = parse_config(config_path.to_str().unwrap());
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("invalid JSON on line 1"), "Expected line number in error: {}", err_msg);
+        assert!(err_msg.contains("lol"), "Expected original value in error: {}", err_msg);
+    }
+
+    #[test]
+    fn test_tz_offset_display() {
+        assert_eq!(format!("{}", TzOffset::Utc), "utc");
+        assert_eq!(format!("{}", TzOffset::Fixed(10800)), "+03:00");
+        assert_eq!(format!("{}", TzOffset::Fixed(-18000)), "-05:00");
+        assert_eq!(format!("{}", TzOffset::Fixed(19800)), "+05:30");
     }
 }
