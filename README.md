@@ -143,6 +143,10 @@ Where:
 - `proto_to`: Destination protocol - "ftp", "ftps", or "sftp" (optional, default: "ftp")
 - `age`: Minimum file age to transfer (seconds, number) - use `0` to disable age checking and transfer all files immediately
 - `filename_regexp`: Regular expression pattern to match files (string)
+- `tz_from`: Timezone offset for source server MDTM timestamps (optional, default: `"utc"`)
+- `tz_to`: Timezone offset for target server timestamps (optional, default: `"utc"`)
+
+Timezone offset formats: `"utc"`, `"+03:00"`, `"-05:30"`, `"+0300"`, `"+3"`, `"+03"`. Use `tz_from` when the source FTP server returns local time instead of UTC in MDTM responses — this ensures accurate age-based filtering. Not needed for SFTP (mtime is always UTC).
 
 File filtering behavior:
 - All files in the literal source path are retrieved via FTP NLST command
@@ -252,6 +256,12 @@ Using a fast SSD for temporary files with debug logging:
 
 ```
 iftpfm2 -T /mnt/ssd/tmp --debug config.jsonl
+```
+
+FTP server in a non-UTC timezone (e.g., Moscow, UTC+3) returning local time in MDTM:
+
+```
+{"host_from":"ftp.moscow.local","port_from":21,"login_from":"user1","password_from":"pass1","path_from":"/outgoing","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"pass2","path_to":"/incoming","age":3600,"filename_regexp":".*","tz_from":"+03:00"}
 ```
 
 Testing
