@@ -2,6 +2,35 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.13] - 2026-05-29
+
+### Added
+- **Bind address for outgoing connections (`bind_from` / `bind_to`)** - per-config local IP binding
+  - New JSONL config fields: `bind_from`, `bind_to` (default: OS chooses, backward compatible)
+  - On multi-homed servers with iproute2 policy routing, source and target connections can use different interfaces
+  - FTP/FTPS: binds both control connection and passive data connections
+  - SFTP: binds control connection only (data goes through SSH channel)
+  - Address validated as `IpAddr` during serde deserialization (invalid IP → parse error with line number)
+  - Uses `socket2` crate for bind-then-connect pattern
+- **Bind address logging** - log line when `bind_from`/`bind_to` is active
+  - Example: `[ftp] Binding SOURCE local address to 192.168.1.10`
+  - No log when bind not set (clean output)
+
+### Changed
+- `FileTransferClient::connect()` trait method now includes `bind_addr: Option<IpAddr>` parameter
+- `Client::connect()` enum wrapper and all protocol implementations updated
+- `passive_stream_builder` in FTP/FTPS uses `socket2` bind-then-connect for data connections
+- `connect_and_login()` in `ftp_ops.rs` accepts `bind_addr` parameter
+- `test_bind.sh` integration test added to `make test` suite
+
+### Tested
+- 7 new unit tests for bind_from/bind_to serde (IPv4, IPv6, null, missing, invalid, parse_config)
+- `test_bind.sh` integration test: bind 127.0.0.1 success, no bind default, invalid IP error, unreachable address failure
+- All 70 unit tests pass
+- All 12 integration test scripts pass
+
+---
+
 ## [2.4.12] - 2026-04-24
 
 ### Added
@@ -484,6 +513,7 @@ After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
 
 ## Version Reference
 
+- **2.4.13** - Bind address for outgoing connections (bind_from/bind_to) per JSONL config
 - **2.4.12** - Timezone offset support (tz_from/tz_to) for MDTM timestamp correction
 - **2.4.11** - Thread-local session context for improved log tracing with [Tn] [hash] format
 - **2.4.10** - Control connection timeout, DataConnectionAlreadyOpen retry, nlst() O(n) optimization
