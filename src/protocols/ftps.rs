@@ -10,7 +10,7 @@ use std::time::Duration;
 use suppaftp::{RustlsConnector, RustlsFtpStream, types::Mode};
 
 use crate::logging::log_with_thread;
-use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
+use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError, create_tcp_stream};
 
 /// Default timeout for read/write operations on control connection
 const DEFAULT_RW_TIMEOUT: Duration = Duration::from_secs(60);
@@ -139,31 +139,56 @@ impl FileTransferClient for FtpsClient {
         // Wrap the config in Arc so we can create multiple connectors from it
         let tls_config = Arc::new(tls_config);
 
+        let bind = config.bind_addr;
+        let data_timeout = timeout;
+
         // Try each address until one succeeds
         let mut last_error = None;
         for addr in addrs {
-            match RustlsFtpStream::connect_timeout(addr, timeout) {
-                Ok(secure_stream) => {
-                    // Create a new connector from the shared Arc for this attempt
-                    let connector = RustlsConnector::from(tls_config.clone());
-                    match secure_stream.into_secure(connector, host) {
-                        Ok(mut stream) => {
-                            // Set read/write timeout on the control connection
-                            // This prevents hanging on commands like QUIT, CWD, etc.
-                            let tcp_stream = stream.get_ref();
-                            tcp_stream.set_read_timeout(Some(DEFAULT_RW_TIMEOUT))
-                                .map_err(FtpError::ConnectionError)?;
-                            tcp_stream.set_write_timeout(Some(DEFAULT_RW_TIMEOUT))
-                                .map_err(FtpError::ConnectionError)?;
+            // Use create_tcp_stream for bind support
+            let tcp = match create_tcp_stream(bind.as_ref(), addr, timeout) {
+                Ok(tcp) => tcp,
+                Err(e) => {
+                    last_error = Some(FtpError::ConnectionError(e));
+                    continue;
+                }
+            };
 
-                            // Enable data channel protection (PROT P) for secure data transfer
-                            let _ = stream.custom_command("PROT P", &[suppaftp::Status::CommandOk])?;
-                            stream.set_mode(Mode::Passive);
-                            stream.set_passive_nat_workaround(true);
-                            return Ok(FtpsClient { stream });
-                        }
-                        Err(e) => last_error = Some(e),
-                    }
+            // Create FTP stream from connected TCP
+            // Use RustlsFtpStream::connect_with_stream to get ImplFtpStream<RustlsStream>
+            // which is needed for into_secure() with RustlsConnector
+            let plain_stream = match RustlsFtpStream::connect_with_stream(tcp) {
+                Ok(s) => s,
+                Err(e) => {
+                    last_error = Some(e);
+                    continue;
+                }
+            };
+
+            // Upgrade to TLS
+            let connector = RustlsConnector::from(tls_config.clone());
+            match plain_stream.into_secure(connector, host) {
+                Ok(mut stream) => {
+                    // Set read/write timeout on the control connection
+                    let tcp_stream = stream.get_ref();
+                    tcp_stream.set_read_timeout(Some(DEFAULT_RW_TIMEOUT))
+                        .map_err(FtpError::ConnectionError)?;
+                    tcp_stream.set_write_timeout(Some(DEFAULT_RW_TIMEOUT))
+                        .map_err(FtpError::ConnectionError)?;
+
+                    // Set passive_stream_builder AFTER TLS upgrade so data connections
+                    // are also bound to the same local address
+                    let bind_clone = bind;
+                    stream = stream.passive_stream_builder(move |data_addr| {
+                        create_tcp_stream(bind_clone.as_ref(), data_addr, data_timeout)
+                            .map_err(FtpError::ConnectionError)
+                    });
+
+                    // Enable data channel protection (PROT P) for secure data transfer
+                    let _ = stream.custom_command("PROT P", &[suppaftp::Status::CommandOk])?;
+                    stream.set_mode(Mode::Passive);
+                    stream.set_passive_nat_workaround(true);
+                    return Ok(FtpsClient { stream });
                 }
                 Err(e) => last_error = Some(e),
             }

@@ -65,6 +65,11 @@ cargo doc --open
   - Verifies RAM buffer usage for small files
   - Verifies disk temp file usage for large files
   - Tests `--ram-threshold 0` forces all files to RAM
+- `test_bind.sh` - Bind address test
+  - Tests `-b`/`--bind` flag for outgoing connection bind address
+  - Tests invalid/missing bind address error handling
+  - Tests successful transfer with `-b 127.0.0.1`
+  - Tests unreachable bind address failure
 - `test_sftp_docker.sh` - SFTP test (separate `make test-sftp` target)
   - Prerequisites: Docker with `atmoz/sftp` container
   - Starts two SFTP servers on ports 3222/3223
@@ -212,7 +217,7 @@ cargo doc --open
 - `test_pid.sh` - Tests PID file creation and nix-based signaling
 - SFTP tests: `make test-sftp` (separate target, uses Docker atmoz/sftp container)
 - **Run all tests (unit + integration):** `make test` in the project root directory
-  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_sftp_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, `./test_pid.sh`, and `./test_ram_threshold.sh`
+  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_sftp_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, `./test_pid.sh`, `./test_ram_threshold.sh`, and `./test_bind.sh`
   - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
 
 **Connection Timeout:**
@@ -258,6 +263,8 @@ cargo doc --open
 | `-g` | `<seconds>` | Grace period before SIGKILL (default: 30) |
 | `-t` | `<seconds>` | Connection timeout in seconds (default: 30) |
 | `-T` | `<dir>` | Directory for temporary files (default: system temp) |
+| `-b` | `<addr>` | Local IP address to bind for outgoing connections |
+| `--bind` | `<addr>` | Alias for `-b` |
 | `--debug` | - | Enable debug logging (shows temp file paths, etc.) |
 | `--ram-threshold` | `<bytes>` | RAM threshold for temp files (default: 10485760) |
 | `--insecure-skip-verify` | - | Skip TLS certificate verification for FTPS (DANGEROUS) |
@@ -268,3 +275,12 @@ cargo doc --open
 - Files larger than threshold use disk temp files (avoids OOM)
 - `--ram-threshold 0` forces ALL files to RAM buffer (use with caution!)
 - Debug logging shows decision: "Using RAM buffer" or "Using disk buffer"
+
+**Bind Address Behavior (`-b`/`--bind`):**
+- Binds all outgoing connections (control + data) to the specified local IP address
+- On multi-homed servers, ensures source and target servers see consistent source IP
+- FTP/FTPS: binds both control connection and passive data connections (via `passive_stream_builder`)
+- SFTP: binds control connection only (data goes through SSH channel, no separate TCP connection)
+- When not specified (default): OS chooses source address automatically (standard behavior)
+- Uses `socket2` crate for bind-then-connect pattern
+- Address validated as `IpAddr` at CLI parsing time

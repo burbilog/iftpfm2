@@ -45,6 +45,7 @@ test:
 	./test_pid.sh
 	./test_pid_no_xdg.sh
 	./test_ram_threshold.sh
+	./test_bind.sh
 	@echo ""
 	@command -v docker >/dev/null 2>&1 && { \
 		echo "Running Docker integration tests..."; \

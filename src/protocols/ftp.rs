@@ -8,7 +8,7 @@ use std::net::ToSocketAddrs;
 use std::time::Duration;
 use suppaftp::FtpStream;
 
-use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
+use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError, create_tcp_stream};
 
 /// Default timeout for read/write operations on control connection
 const DEFAULT_RW_TIMEOUT: Duration = Duration::from_secs(60);
@@ -23,7 +23,7 @@ impl FileTransferClient for FtpClient {
         host: &str,
         port: u16,
         timeout: Duration,
-        _config: &ProtocolConfig,
+        config: &ProtocolConfig,
         _user: &str,
         _password: Option<&str>,
         _keyfile_path: Option<&str>,
@@ -45,21 +45,37 @@ impl FileTransferClient for FtpClient {
             )));
         }
 
+        let bind = config.bind_addr;
+        let data_timeout = timeout;
+
         // Try each address until one succeeds
         let mut last_error = None;
         for addr in addrs {
-            match FtpStream::connect_timeout(addr, timeout) {
-                Ok(stream) => {
-                    // Set read/write timeout on the control connection
-                    // This prevents hanging on commands like QUIT, CWD, etc.
-                    let tcp_stream = stream.get_ref();
-                    tcp_stream.set_read_timeout(Some(DEFAULT_RW_TIMEOUT))
-                        .map_err(FtpError::ConnectionError)?;
-                    tcp_stream.set_write_timeout(Some(DEFAULT_RW_TIMEOUT))
-                        .map_err(FtpError::ConnectionError)?;
-                    return Ok(FtpClient { stream });
+            match create_tcp_stream(bind.as_ref(), addr, timeout) {
+                Ok(tcp) => {
+                    match FtpStream::connect_with_stream(tcp) {
+                        Ok(stream) => {
+                            // Set read/write timeout on the control connection
+                            let tcp_stream = stream.get_ref();
+                            tcp_stream.set_read_timeout(Some(DEFAULT_RW_TIMEOUT))
+                                .map_err(FtpError::ConnectionError)?;
+                            tcp_stream.set_write_timeout(Some(DEFAULT_RW_TIMEOUT))
+                                .map_err(FtpError::ConnectionError)?;
+
+                            // Set passive_stream_builder so data connections also bind to same address
+                            let mut stream = stream;
+                            let bind_clone = bind;
+                            stream = stream.passive_stream_builder(move |data_addr| {
+                                create_tcp_stream(bind_clone.as_ref(), data_addr, data_timeout)
+                                    .map_err(FtpError::ConnectionError)
+                            });
+
+                            return Ok(FtpClient { stream });
+                        }
+                        Err(e) => last_error = Some(e),
+                    }
                 }
-                Err(e) => last_error = Some(e),
+                Err(e) => last_error = Some(FtpError::ConnectionError(e)),
             }
         }
 

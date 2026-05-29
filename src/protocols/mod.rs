@@ -15,6 +15,7 @@ pub use sftp::SftpClient;
 
 use crate::config::Protocol;
 use std::io::Read;
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
 
 /// Configuration for protocol connections
@@ -22,6 +23,31 @@ use std::time::Duration;
 pub struct ProtocolConfig {
     /// Skip TLS certificate verification (for FTPS with self-signed certs)
     pub insecure_skip_verify: bool,
+    /// Local IP address to bind for outgoing connections (None = OS default)
+    pub bind_addr: Option<IpAddr>,
+}
+
+/// Create a TcpStream with optional local address binding
+///
+/// Uses socket2 for bind-then-connect pattern. When `bind_addr` is None,
+/// `socket.bind()` is skipped — OS chooses the source address automatically
+/// (identical behavior to `TcpStream::connect_timeout()`).
+pub(crate) fn create_tcp_stream(
+    bind_addr: Option<&IpAddr>,
+    remote: SocketAddr,
+    timeout: Duration,
+) -> Result<TcpStream, std::io::Error> {
+    let domain = if remote.is_ipv4() {
+        socket2::Domain::IPV4
+    } else {
+        socket2::Domain::IPV6
+    };
+    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+    if let Some(addr) = bind_addr {
+        socket.bind(&socket2::SockAddr::from(SocketAddr::new(*addr, 0)))?;
+    }
+    socket.connect_timeout(&socket2::SockAddr::from(remote), timeout)?;
+    Ok(socket.into())
 }
 
 /// Error type for protocol operations
@@ -150,6 +176,7 @@ impl Client {
         port: u16,
         timeout: Duration,
         insecure_skip_verify: bool,
+        bind_addr: Option<IpAddr>,
         user: &str,
         password: Option<&str>,
         keyfile_path: Option<&str>,
@@ -157,6 +184,7 @@ impl Client {
     ) -> Result<Self, FtpError> {
         let config = ProtocolConfig {
             insecure_skip_verify,
+            bind_addr,
         };
 
         match proto {

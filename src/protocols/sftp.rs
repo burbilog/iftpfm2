@@ -4,12 +4,11 @@
 //! trait for SFTP connections using the ssh2 crate.
 
 use std::io::Read;
-use std::net::TcpStream;
 use std::net::ToSocketAddrs;
 use std::path::Path;
 use std::time::Duration;
 use ssh2::{Session, Sftp};
-use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError};
+use crate::protocols::{FileTransferClient, ProtocolConfig, TransferMode, FtpError, create_tcp_stream};
 
 /// Authentication method for SFTP connections
 ///
@@ -83,10 +82,11 @@ impl FileTransferClient for SftpClient {
         }
 
         // Try each address until one succeeds
+        let bind = _config.bind_addr;
         let mut last_error = None;
         for addr in addrs {
-            // TCP connect with timeout
-            let stream = match TcpStream::connect_timeout(&addr, timeout) {
+            // TCP connect with optional bind
+            let stream = match create_tcp_stream(bind.as_ref(), addr, timeout) {
                 Ok(s) => s,
                 Err(e) => {
                     last_error = Some(FtpError::ConnectionError(e));

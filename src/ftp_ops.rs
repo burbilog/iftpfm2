@@ -6,6 +6,7 @@ use crate::protocols::Client;
 use crate::shutdown::is_shutdown_requested;
 use regex::Regex;
 use std::io::{Cursor, Read};
+use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
 
@@ -31,6 +32,7 @@ fn reconnect_both(
     config: &Config,
     timeout: Duration,
     insecure_skip_verify: bool,
+    bind_addr: Option<IpAddr>,
     thread_id: usize,
 ) -> Result<(Client, Client), String> {
     let _ = log_with_thread(
@@ -50,6 +52,7 @@ fn reconnect_both(
         &config.path_from,
         timeout,
         insecure_skip_verify,
+        bind_addr,
         "SOURCE",
         thread_id,
     ) {
@@ -71,6 +74,7 @@ fn reconnect_both(
         &config.path_to,
         timeout,
         insecure_skip_verify,
+        bind_addr,
         "TARGET",
         thread_id,
     ) {
@@ -113,6 +117,7 @@ fn connect_and_login(
     path: &str,
     timeout: Duration,
     insecure_skip_verify: bool,
+    bind_addr: Option<IpAddr>,
     server_type: &str, // "SOURCE" or "TARGET" for logging
     thread_id: usize,
 ) -> Result<Client, String> {
@@ -120,7 +125,7 @@ fn connect_and_login(
     // For SFTP with keyfile, password can be None
     let _ = log_with_thread(format!("[{}] Connecting to {}:{}...", proto, host, port), Some(thread_id));
 
-    let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, login, password.map(|s| s.as_str()), keyfile, keyfile_passphrase) {
+    let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, bind_addr, login, password.map(|s| s.as_str()), keyfile, keyfile_passphrase) {
         Ok(c) => {
             let _ = log_with_thread(format!("[{}] Connected successfully", proto), Some(thread_id));
             c
@@ -447,6 +452,7 @@ pub fn transfer_files(
     thread_id: usize,
     connect_timeout: Option<u64>,
     insecure_skip_verify: bool,
+    bind_addr: Option<IpAddr>,
     temp_dir: Option<&str>,
     ram_threshold: Option<u64>,
 ) -> i32 {
@@ -497,6 +503,7 @@ pub fn transfer_files(
         &config.path_from,
         timeout,
         insecure_skip_verify,
+        bind_addr,
         "SOURCE",
         thread_id,
     ) {
@@ -519,6 +526,7 @@ pub fn transfer_files(
         &config.path_to,
         timeout,
         insecure_skip_verify,
+        bind_addr,
         "TARGET",
         thread_id,
     ) {
@@ -915,7 +923,7 @@ pub fn transfer_files(
                     }
 
                     // Attempt to reconnect
-                    match reconnect_both(config, timeout, insecure_skip_verify, thread_id) {
+                    match reconnect_both(config, timeout, insecure_skip_verify, bind_addr, thread_id) {
                         Ok((new_from, new_to)) => {
                             let _ = ftp_from.quit();
                             let _ = ftp_to.quit();
@@ -1025,7 +1033,7 @@ mod tests {
             tz_to: TzOffset::Utc,
         };
 
-        let result = transfer_files(&config, false, 1, None, false, None, None);
+        let result = transfer_files(&config, false, 1, None, false, None, None, None);
         assert_eq!(
             result, 0,
             "Should return 0 when shutdown requested before start"

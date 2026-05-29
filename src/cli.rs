@@ -15,6 +15,7 @@ pub struct CliArgs {
     pub temp_dir: Option<String>,
     pub debug: bool,
     pub ram_threshold: Option<u64>, // None = 10MB default, Some(0) = all RAM
+    pub bind_addr: Option<std::net::IpAddr>,
 }
 
 /// Error types for command line argument parsing
@@ -66,6 +67,8 @@ Options:
   -g <seconds>       Grace period in seconds before SIGKILL (default: 30)
   -t <seconds>       Connection timeout in seconds (default: 30)
   -T <dir>           Directory for temporary files (default: system temp dir)
+  -b <addr>          Local IP address to bind for outgoing connections
+  --bind <addr>      (alias for -b)
   --debug            Enable debug logging (shows temp file paths, etc.)
   --ram-threshold <bytes>
                      RAM threshold for temp files (default: 10485760)
@@ -82,25 +85,10 @@ Logging:
     );
 }
 
-/// Parses command line arguments and returns configuration options
+/// Parses command line arguments from an iterator and returns configuration options
 ///
-/// # Returns
-/// A `Result<CliArgs, CliError>` containing all parsed command line arguments.
-///
-/// # Errors
-/// - Returns `CliError::MissingArgument` if required arguments are missing
-/// - Returns `CliError::InvalidArgument` if numeric arguments can't be parsed
-/// - Returns `CliError::UnexpectedArgument` if unknown arguments are provided
-/// - Returns `CliError::MutuallyExclusiveFlags` if conflicting flags are used
-/// - Returns `CliError::HelpRequested` if `-h` flag is used
-/// - Returns `CliError::VersionRequested` if `-v` flag is used
-///
-/// # Example
-/// ```text
-/// // let args = parse_args()?;
-/// // let delete = args.delete;
-/// ```
-pub fn parse_args() -> Result<CliArgs, CliError> {
+/// Separated from `parse_args()` for testability without `env::args()`.
+pub fn parse_args_from<I: Iterator<Item = String>>(mut args: I) -> Result<CliArgs, CliError> {
     let mut log_file = None;
     let mut delete = false;
     let mut config_file = None;
@@ -112,8 +100,8 @@ pub fn parse_args() -> Result<CliArgs, CliError> {
     let mut temp_dir = None; // Default: use system temp directory
     let mut debug = false; // Default: no debug logging
     let mut ram_threshold: Option<u64> = None;
+    let mut bind_addr: Option<std::net::IpAddr> = None;
 
-    let mut args = env::args();
     args.next(); // Skip program name
 
     while let Some(arg) = args.next() {
@@ -123,7 +111,7 @@ pub fn parse_args() -> Result<CliArgs, CliError> {
                 return Err(CliError::HelpRequested);
             }
             "-v" => {
-                println!("{} version {}", crate::PROGRAM_NAME, crate::PROGRAM_VERSION); // Using constants from lib.rs
+                println!("{} version {}", crate::PROGRAM_NAME, crate::PROGRAM_VERSION);
                 return Err(CliError::VersionRequested);
             }
             "-d" => delete = true,
@@ -178,6 +166,18 @@ pub fn parse_args() -> Result<CliArgs, CliError> {
                     print_usage();
                     return Err(CliError::InvalidArgument("connect timeout must be a positive number".to_string()));
                 }
+            }
+            "-b" | "--bind" => {
+                let arg = args.next().ok_or_else(|| {
+                    eprintln!("Error: Missing bind address argument");
+                    print_usage();
+                    CliError::MissingArgument("bind address".to_string())
+                })?;
+                bind_addr = Some(arg.parse::<std::net::IpAddr>().map_err(|_| {
+                    eprintln!("Error: Invalid bind address '{}'", arg);
+                    print_usage();
+                    CliError::InvalidArgument(format!("invalid bind address '{}'", arg))
+                })?);
             }
             "--insecure-skip-verify" => {
                 insecure_skip_verify = true;
@@ -235,5 +235,87 @@ pub fn parse_args() -> Result<CliArgs, CliError> {
         temp_dir,
         debug,
         ram_threshold,
+        bind_addr,
     })
+}
+
+/// Parses command line arguments and returns configuration options
+///
+/// # Returns
+/// A `Result<CliArgs, CliError>` containing all parsed command line arguments.
+///
+/// # Errors
+/// - Returns `CliError::MissingArgument` if required arguments are missing
+/// - Returns `CliError::InvalidArgument` if numeric arguments can't be parsed
+/// - Returns `CliError::UnexpectedArgument` if unknown arguments are provided
+/// - Returns `CliError::MutuallyExclusiveFlags` if conflicting flags are used
+/// - Returns `CliError::HelpRequested` if `-h` flag is used
+/// - Returns `CliError::VersionRequested` if `-v` flag is used
+///
+/// # Example
+/// ```text
+/// // let args = parse_args()?;
+/// // let delete = args.delete;
+/// ```
+pub fn parse_args() -> Result<CliArgs, CliError> {
+    parse_args_from(env::args())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_args(args: &[&str]) -> Vec<String> {
+        args.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_parse_bind_address_short() {
+        let args = make_args(&["prog", "-b", "192.168.1.100", "config.jsonl"]);
+        let result = parse_args_from(args.into_iter()).unwrap();
+        assert_eq!(result.bind_addr, Some("192.168.1.100".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_parse_bind_long_form() {
+        let args = make_args(&["prog", "--bind", "10.0.0.1", "config.jsonl"]);
+        let result = parse_args_from(args.into_iter()).unwrap();
+        assert_eq!(result.bind_addr, Some("10.0.0.1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_bind_invalid_ip() {
+        let args = make_args(&["prog", "-b", "not-an-ip", "config.jsonl"]);
+        let result = parse_args_from(args.into_iter());
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::InvalidArgument(msg) => assert!(msg.contains("not-an-ip")),
+            other => panic!("Expected InvalidArgument, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_bind_missing_argument() {
+        let args = make_args(&["prog", "-b"]);
+        let result = parse_args_from(args.into_iter());
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::MissingArgument(msg) => assert!(msg.contains("bind")),
+            other => panic!("Expected MissingArgument, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_no_bind_default() {
+        let args = make_args(&["prog", "config.jsonl"]);
+        let result = parse_args_from(args.into_iter()).unwrap();
+        assert_eq!(result.bind_addr, None);
+    }
+
+    #[test]
+    fn test_bind_ipv6() {
+        let args = make_args(&["prog", "-b", "::1", "config.jsonl"]);
+        let result = parse_args_from(args.into_iter()).unwrap();
+        assert_eq!(result.bind_addr, Some("::1".parse().unwrap()));
+    }
 }
