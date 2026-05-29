@@ -163,7 +163,13 @@ if [ -f "/tmp/ftp_bind2/unreachable.txt" ]; then
     echo "FAIL: file should NOT have been transferred with unreachable bind"
     exit 1
 fi
-echo "PASS: unreachable bind_from fails gracefully (file not transferred)"
+# Check that error was logged (bind/connect failure message)
+if ! echo "$OUTPUT" | grep -qi "error\|failed\|bind\|99.99.99.99"; then
+    echo "FAIL: no error message in output for unreachable bind_from"
+    echo "Output was: $OUTPUT"
+    exit 1
+fi
+echo "PASS: unreachable bind_from fails gracefully with error message"
 
 echo ""
 echo "All bind tests passed!"

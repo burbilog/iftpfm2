@@ -495,6 +495,42 @@ mod tests {
     use tempfile::tempdir;
     use secrecy::Secret;
 
+    /// Helper to build a Config with sensible defaults for validation tests.
+    /// Only specify fields that differ from defaults.
+    fn make_config<F>(
+        mut overrides: F,
+    ) -> Config
+    where
+        F: FnMut(&mut Config),
+    {
+        let mut config = Config {
+            ip_address_from: "192.168.1.1".to_string(),
+            port_from: 21,
+            login_from: "user".to_string(),
+            password_from: Some(Secret::new("pass".to_string())),
+            keyfile_from: None,
+            keyfile_pass_from: None,
+            path_from: "/path/".to_string(),
+            proto_from: Protocol::Ftp,
+            ip_address_to: "192.168.1.2".to_string(),
+            port_to: 21,
+            login_to: "user2".to_string(),
+            password_to: Some(Secret::new("pass2".to_string())),
+            keyfile_to: None,
+            keyfile_pass_to: None,
+            path_to: "/path2/".to_string(),
+            proto_to: Protocol::Ftp,
+            age: 100,
+            filename_regexp: ".*".to_string(),
+            tz_from: TzOffset::Utc,
+            tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
+        };
+        overrides(&mut config);
+        config
+    }
+
     #[test]
     fn test_parse_config() {
         let config_string = r#"{"host_from":"192.168.0.1","port_from":22,"login_from":"user1","password_from":"password1","path_from":"/path/to/files/","host_to":"192.168.0.2","port_to":22,"login_to":"user2","password_to":"password2","path_to":"/path/to/files2","age":30,"filename_regexp":".*"}
@@ -564,527 +600,147 @@ mod tests {
 
     #[test]
     fn test_config_validate_empty_host_from() {
-        let config = Config {
-            ip_address_from: "".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.ip_address_from = "".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_zero_port_from() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 0,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.port_from = 0);
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_empty_login() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.login_from = "".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_empty_password() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.password_from = Some(Secret::new("".to_string())));
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_empty_path() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.path_from = "".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_zero_age() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 0,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.age = 0);
         // age 0 is valid and disables age filtering
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_config_validate_invalid_regex() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: "(invalid[".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.filename_regexp = "(invalid[".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_valid() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|_| {});
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_config_validate_invalid_host_characters() {
-        let config = Config {
-            ip_address_from: "192.168.1.1/invalid".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.ip_address_from = "192.168.1.1/invalid".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_invalid_host_characters_backslash() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168\\1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.ip_address_to = "192.168\\1.2".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_invalid_host_characters_space() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2 invalid".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.ip_address_to = "192.168.1.2 invalid".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_sftp_no_auth() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 22,
-            login_from: "user".to_string(),
-            password_from: None,
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Sftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| {
+            c.port_from = 22;
+            c.password_from = None;
+            c.proto_from = Protocol::Sftp;
+        });
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_sftp_both_auth_methods() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 22,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: Some("/path/to/key".to_string()),
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Sftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| {
+            c.port_from = 22;
+            c.password_from = Some(Secret::new("pass".to_string()));
+            c.keyfile_from = Some("/path/to/key".to_string());
+            c.proto_from = Protocol::Sftp;
+        });
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_sftp_nonexistent_keyfile() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 22,
-            login_from: "user".to_string(),
-            password_from: None,
-            keyfile_from: Some("/nonexistent/keyfile".to_string()),
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Sftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| {
+            c.port_from = 22;
+            c.password_from = None;
+            c.keyfile_from = Some("/nonexistent/keyfile".to_string());
+            c.proto_from = Protocol::Sftp;
+        });
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_sftp_password_auth_valid() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 22,
-            login_from: "user".to_string(),
-            password_from: Some(Secret::new("pass".to_string())),
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Sftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| {
+            c.port_from = 22;
+            c.proto_from = Protocol::Sftp;
+        });
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_config_validate_ftp_requires_password() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 21,
-            login_from: "user".to_string(),
-            password_from: None,
-            keyfile_from: None,
-            keyfile_pass_from: None,
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Ftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 21,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Ftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| c.password_from = None);
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_sftp_keyfile_passphrase_requires_keyfile() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 22,
-            login_from: "user".to_string(),
-            password_from: None,
-            keyfile_from: None,
-            keyfile_pass_from: Some(Secret::new("passphrase".to_string())),
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Sftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 22,
-            login_to: "user2".to_string(),
-            password_to: Some(Secret::new("pass2".to_string())),
-            keyfile_to: None,
-            keyfile_pass_to: None,
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Sftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| {
+            c.port_from = 22;
+            c.password_from = None;
+            c.keyfile_pass_from = Some(Secret::new("passphrase".to_string()));
+            c.proto_from = Protocol::Sftp;
+            c.port_to = 22;
+            c.password_to = Some(Secret::new("pass2".to_string()));
+            c.proto_to = Protocol::Sftp;
+        });
         // Passphrase without keyfile should fail validation
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_config_validate_sftp_keyfile_with_passphrase_valid() {
-        let config = Config {
-            ip_address_from: "192.168.1.1".to_string(),
-            port_from: 22,
-            login_from: "user".to_string(),
-            password_from: None,
-            // Note: using a nonexistent keyfile path - validation will check existence
-            // For this test, we only check that the structure allows passphrase
-            keyfile_from: Some("/nonexistent/keyfile".to_string()),
-            keyfile_pass_from: Some(Secret::new("passphrase".to_string())),
-            path_from: "/path/".to_string(),
-            proto_from: Protocol::Sftp,
-            ip_address_to: "192.168.1.2".to_string(),
-            port_to: 22,
-            login_to: "user2".to_string(),
-            password_to: None,
-            keyfile_to: Some("/nonexistent/keyfile2".to_string()),
-            keyfile_pass_to: Some(Secret::new("passphrase2".to_string())),
-            path_to: "/path2/".to_string(),
-            proto_to: Protocol::Sftp,
-            age: 100,
-            filename_regexp: ".*".to_string(),
-            tz_from: TzOffset::Utc,
-            tz_to: TzOffset::Utc,
-            bind_from: None,
-            bind_to: None,
-        };
+        let config = make_config(|c| {
+            c.port_from = 22;
+            c.password_from = None;
+            c.keyfile_from = Some("/nonexistent/keyfile".to_string());
+            c.keyfile_pass_from = Some(Secret::new("passphrase".to_string()));
+            c.proto_from = Protocol::Sftp;
+            c.port_to = 22;
+            c.password_to = None;
+            c.keyfile_to = Some("/nonexistent/keyfile2".to_string());
+            c.keyfile_pass_to = Some(Secret::new("passphrase2".to_string()));
+            c.proto_to = Protocol::Sftp;
+        });
         // Passphrase with keyfile should pass structural validation
         // (will fail on nonexistent file, but that's a different error)
         let result = config.validate();
@@ -1211,5 +867,69 @@ mod tests {
         assert_eq!(format!("{}", TzOffset::Fixed(10800)), "+03:00");
         assert_eq!(format!("{}", TzOffset::Fixed(-18000)), "-05:00");
         assert_eq!(format!("{}", TzOffset::Fixed(19800)), "+05:30");
+    }
+
+    // ===== bind_from/bind_to deserialization tests =====
+
+    #[test]
+    fn test_bind_from_ipv4() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","bind_from":"1.2.3.4"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.bind_from, Some("1.2.3.4".parse().unwrap()));
+        assert_eq!(config.bind_to, None); // default
+    }
+
+    #[test]
+    fn test_bind_to_ipv4() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","bind_to":"10.0.0.1"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.bind_from, None); // default
+        assert_eq!(config.bind_to, Some("10.0.0.1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_bind_ipv6() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","bind_from":"::1","bind_to":"fe80::1"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.bind_from, Some("::1".parse().unwrap()));
+        assert_eq!(config.bind_to, Some("fe80::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_bind_null_explicit() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","bind_from":null,"bind_to":null}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.bind_from, None);
+        assert_eq!(config.bind_to, None);
+    }
+
+    #[test]
+    fn test_bind_missing_defaults_to_none() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.bind_from, None);
+        assert_eq!(config.bind_to, None);
+    }
+
+    #[test]
+    fn test_bind_invalid_ip_rejected() {
+        let json = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","bind_from":"not-an-ip"}"#;
+        let result = serde_json::from_str::<Config>(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bind_invalid_ip_via_parse_config() {
+        let config_string = r#"{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path2","age":100,"filename_regexp":".*","bind_to":"999.999.999.999"}"#;
+        let dir = tempdir().unwrap();
+        let mut config_path = PathBuf::from(dir.path());
+        config_path.push("config.jsonl");
+        let mut file = File::create(&config_path).unwrap();
+        file.write_all(config_string.as_bytes()).unwrap();
+
+        let result = parse_config(config_path.to_str().unwrap());
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("invalid JSON on line 1"), "Expected line number in error: {}", err_msg);
     }
 }
