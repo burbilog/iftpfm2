@@ -3,7 +3,23 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::fmt;
+use std::net::IpAddr;
 use secrecy::{Secret, ExposeSecret};
+
+/// Deserialize an optional IpAddr from a JSON string or null
+/// Missing/null → None, string → parsed IpAddr
+fn deserialize_optional_ip<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(s) => s.parse::<IpAddr>()
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
+}
 
 /// FTP/FTPS/SFTP protocol type
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -202,6 +218,12 @@ pub struct Config {
     /// Timezone offset for target server timestamps (JSON field: tz_to, default: utc)
     #[serde(rename = "tz_to", default)]
     pub tz_to: TzOffset,
+    /// Local IP address to bind for source server connections (JSON field: bind_from, default: none)
+    #[serde(rename = "bind_from", default, deserialize_with = "deserialize_optional_ip")]
+    pub bind_from: Option<IpAddr>,
+    /// Local IP address to bind for target server connections (JSON field: bind_to, default: none)
+    #[serde(rename = "bind_to", default, deserialize_with = "deserialize_optional_ip")]
+    pub bind_to: Option<IpAddr>,
 }
 
 impl Config {
@@ -563,6 +585,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -590,6 +614,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -617,6 +643,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -644,6 +672,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -671,6 +701,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -698,6 +730,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         // age 0 is valid and disables age filtering
         assert!(config.validate().is_ok());
@@ -726,6 +760,8 @@ mod tests {
             filename_regexp: "(invalid[".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -753,6 +789,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_ok());
     }
@@ -780,6 +818,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -807,6 +847,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -834,6 +876,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -861,6 +905,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -888,6 +934,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -915,6 +963,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -942,6 +992,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_ok());
     }
@@ -969,6 +1021,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         assert!(config.validate().is_err());
     }
@@ -996,6 +1050,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         // Passphrase without keyfile should fail validation
         assert!(config.validate().is_err());
@@ -1026,6 +1082,8 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
         // Passphrase with keyfile should pass structural validation
         // (will fail on nonexistent file, but that's a different error)

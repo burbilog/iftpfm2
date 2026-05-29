@@ -66,9 +66,10 @@ cargo doc --open
   - Verifies disk temp file usage for large files
   - Tests `--ram-threshold 0` forces all files to RAM
 - `test_bind.sh` - Bind address test
-  - Tests `-b`/`--bind` flag for outgoing connection bind address
-  - Tests invalid/missing bind address error handling
-  - Tests successful transfer with `-b 127.0.0.1`
+  - Tests `bind_from`/`bind_to` fields in JSONL config for outgoing connection bind address
+  - Tests invalid bind_from IP error handling
+  - Tests successful transfer with `bind_from: "127.0.0.1"` and `bind_to: "127.0.0.1"`
+  - Tests transfer without bind fields (OS default)
   - Tests unreachable bind address failure
 - `test_sftp_docker.sh` - SFTP test (separate `make test-sftp` target)
   - Prerequisites: Docker with `atmoz/sftp` container
@@ -175,6 +176,8 @@ cargo doc --open
 - All fields validated during parsing (non-empty hosts/logins/passwords/paths, ports > 0, age > 0, valid regex)
 - `proto_from` and `proto_to` default to `Protocol::Ftp` if not specified
 - `tz_from` and `tz_to` default to `TzOffset::Utc` if not specified (backward compatible)
+- `bind_from` and `bind_to` default to `None` if not specified (OS chooses source address)
+- `bind_from`/`bind_to` validated as `IpAddr` during serde deserialization (invalid IP → parse error with line number)
 - For SFTP: either password OR keyfile must be specified (validated in config parsing)
 - Regex pattern validated once during parsing (not re-validated during transfer)
 
@@ -263,8 +266,6 @@ cargo doc --open
 | `-g` | `<seconds>` | Grace period before SIGKILL (default: 30) |
 | `-t` | `<seconds>` | Connection timeout in seconds (default: 30) |
 | `-T` | `<dir>` | Directory for temporary files (default: system temp) |
-| `-b` | `<addr>` | Local IP address to bind for outgoing connections |
-| `--bind` | `<addr>` | Alias for `-b` |
 | `--debug` | - | Enable debug logging (shows temp file paths, etc.) |
 | `--ram-threshold` | `<bytes>` | RAM threshold for temp files (default: 10485760) |
 | `--insecure-skip-verify` | - | Skip TLS certificate verification for FTPS (DANGEROUS) |
@@ -276,11 +277,12 @@ cargo doc --open
 - `--ram-threshold 0` forces ALL files to RAM buffer (use with caution!)
 - Debug logging shows decision: "Using RAM buffer" or "Using disk buffer"
 
-**Bind Address Behavior (`-b`/`--bind`):**
-- Binds all outgoing connections (control + data) to the specified local IP address
-- On multi-homed servers, ensures source and target servers see consistent source IP
+**Bind Address Behavior (`bind_from`/`bind_to` in JSONL config):**
+- `bind_from`: binds outgoing connections to source server to specified local IP address
+- `bind_to`: binds outgoing connections to target server to specified local IP address
+- On multi-homed servers with iproute2 policy routing, source and target can use different interfaces
 - FTP/FTPS: binds both control connection and passive data connections (via `passive_stream_builder`)
 - SFTP: binds control connection only (data goes through SSH channel, no separate TCP connection)
 - When not specified (default): OS chooses source address automatically (standard behavior)
 - Uses `socket2` crate for bind-then-connect pattern
-- Address validated as `IpAddr` at CLI parsing time
+- Address validated as `IpAddr` during JSONL config parsing (serde deserialization)

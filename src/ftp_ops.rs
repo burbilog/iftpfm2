@@ -32,7 +32,6 @@ fn reconnect_both(
     config: &Config,
     timeout: Duration,
     insecure_skip_verify: bool,
-    bind_addr: Option<IpAddr>,
     thread_id: usize,
 ) -> Result<(Client, Client), String> {
     let _ = log_with_thread(
@@ -52,7 +51,7 @@ fn reconnect_both(
         &config.path_from,
         timeout,
         insecure_skip_verify,
-        bind_addr,
+        config.bind_from,
         "SOURCE",
         thread_id,
     ) {
@@ -74,7 +73,7 @@ fn reconnect_both(
         &config.path_to,
         timeout,
         insecure_skip_verify,
-        bind_addr,
+        config.bind_to,
         "TARGET",
         thread_id,
     ) {
@@ -452,7 +451,6 @@ pub fn transfer_files(
     thread_id: usize,
     connect_timeout: Option<u64>,
     insecure_skip_verify: bool,
-    bind_addr: Option<IpAddr>,
     temp_dir: Option<&str>,
     ram_threshold: Option<u64>,
 ) -> i32 {
@@ -503,7 +501,7 @@ pub fn transfer_files(
         &config.path_from,
         timeout,
         insecure_skip_verify,
-        bind_addr,
+        config.bind_from,
         "SOURCE",
         thread_id,
     ) {
@@ -526,7 +524,7 @@ pub fn transfer_files(
         &config.path_to,
         timeout,
         insecure_skip_verify,
-        bind_addr,
+        config.bind_to,
         "TARGET",
         thread_id,
     ) {
@@ -923,7 +921,7 @@ pub fn transfer_files(
                     }
 
                     // Attempt to reconnect
-                    match reconnect_both(config, timeout, insecure_skip_verify, bind_addr, thread_id) {
+                    match reconnect_both(config, timeout, insecure_skip_verify, thread_id) {
                         Ok((new_from, new_to)) => {
                             let _ = ftp_from.quit();
                             let _ = ftp_to.quit();
@@ -1031,9 +1029,11 @@ mod tests {
             filename_regexp: ".*".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
 
-        let result = transfer_files(&config, false, 1, None, false, None, None, None);
+        let result = transfer_files(&config, false, 1, None, false, None, None);
         assert_eq!(
             result, 0,
             "Should return 0 when shutdown requested before start"
@@ -1068,6 +1068,8 @@ mod tests {
             filename_regexp: r".*\.txt$".to_string(),
             tz_from: TzOffset::Utc,
             tz_to: TzOffset::Utc,
+            bind_from: None,
+            bind_to: None,
         };
 
         // This should not panic - regex should compile

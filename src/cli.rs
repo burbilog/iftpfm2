@@ -15,7 +15,6 @@ pub struct CliArgs {
     pub temp_dir: Option<String>,
     pub debug: bool,
     pub ram_threshold: Option<u64>, // None = 10MB default, Some(0) = all RAM
-    pub bind_addr: Option<std::net::IpAddr>,
 }
 
 /// Error types for command line argument parsing
@@ -67,8 +66,6 @@ Options:
   -g <seconds>       Grace period in seconds before SIGKILL (default: 30)
   -t <seconds>       Connection timeout in seconds (default: 30)
   -T <dir>           Directory for temporary files (default: system temp dir)
-  -b <addr>          Local IP address to bind for outgoing connections
-  --bind <addr>      (alias for -b)
   --debug            Enable debug logging (shows temp file paths, etc.)
   --ram-threshold <bytes>
                      RAM threshold for temp files (default: 10485760)
@@ -100,7 +97,6 @@ pub fn parse_args_from<I: Iterator<Item = String>>(mut args: I) -> Result<CliArg
     let mut temp_dir = None; // Default: use system temp directory
     let mut debug = false; // Default: no debug logging
     let mut ram_threshold: Option<u64> = None;
-    let mut bind_addr: Option<std::net::IpAddr> = None;
 
     args.next(); // Skip program name
 
@@ -167,18 +163,6 @@ pub fn parse_args_from<I: Iterator<Item = String>>(mut args: I) -> Result<CliArg
                     return Err(CliError::InvalidArgument("connect timeout must be a positive number".to_string()));
                 }
             }
-            "-b" | "--bind" => {
-                let arg = args.next().ok_or_else(|| {
-                    eprintln!("Error: Missing bind address argument");
-                    print_usage();
-                    CliError::MissingArgument("bind address".to_string())
-                })?;
-                bind_addr = Some(arg.parse::<std::net::IpAddr>().map_err(|_| {
-                    eprintln!("Error: Invalid bind address '{}'", arg);
-                    print_usage();
-                    CliError::InvalidArgument(format!("invalid bind address '{}'", arg))
-                })?);
-            }
             "--insecure-skip-verify" => {
                 insecure_skip_verify = true;
             }
@@ -235,7 +219,6 @@ pub fn parse_args_from<I: Iterator<Item = String>>(mut args: I) -> Result<CliArg
         temp_dir,
         debug,
         ram_threshold,
-        bind_addr,
     })
 }
 
@@ -270,52 +253,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_bind_address_short() {
-        let args = make_args(&["prog", "-b", "192.168.1.100", "config.jsonl"]);
-        let result = parse_args_from(args.into_iter()).unwrap();
-        assert_eq!(result.bind_addr, Some("192.168.1.100".parse().unwrap()));
-    }
-
-    #[test]
-    fn test_parse_bind_long_form() {
-        let args = make_args(&["prog", "--bind", "10.0.0.1", "config.jsonl"]);
-        let result = parse_args_from(args.into_iter()).unwrap();
-        assert_eq!(result.bind_addr, Some("10.0.0.1".parse().unwrap()));
-    }
-
-    #[test]
-    fn test_bind_invalid_ip() {
-        let args = make_args(&["prog", "-b", "not-an-ip", "config.jsonl"]);
-        let result = parse_args_from(args.into_iter());
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            CliError::InvalidArgument(msg) => assert!(msg.contains("not-an-ip")),
-            other => panic!("Expected InvalidArgument, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_bind_missing_argument() {
-        let args = make_args(&["prog", "-b"]);
-        let result = parse_args_from(args.into_iter());
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            CliError::MissingArgument(msg) => assert!(msg.contains("bind")),
-            other => panic!("Expected MissingArgument, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_no_bind_default() {
+    fn test_basic_parse() {
         let args = make_args(&["prog", "config.jsonl"]);
         let result = parse_args_from(args.into_iter()).unwrap();
-        assert_eq!(result.bind_addr, None);
-    }
-
-    #[test]
-    fn test_bind_ipv6() {
-        let args = make_args(&["prog", "-b", "::1", "config.jsonl"]);
-        let result = parse_args_from(args.into_iter()).unwrap();
-        assert_eq!(result.bind_addr, Some("::1".parse().unwrap()));
+        assert_eq!(result.config_file, Some("config.jsonl".to_string()));
     }
 }

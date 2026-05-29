@@ -41,7 +41,7 @@ fn main() {
     let cli::CliArgs { delete, log_file: log_file_option,
                        config_file: config_file_option,
                        parallel, randomize, grace_seconds, connect_timeout, insecure_skip_verify,
-                       temp_dir, debug, ram_threshold, bind_addr } =
+                       temp_dir, debug, ram_threshold } =
         match parse_args() { // from iftpfm2::cli
             Ok(args) => args,
             Err(CliError::HelpRequested) => process::exit(0),
@@ -127,7 +127,6 @@ fn main() {
     let delete_arc = Arc::new(delete);
     let temp_dir_arc = Arc::new(temp_dir.as_deref());
     let ram_threshold_arc = Arc::new(ram_threshold);
-    let bind_addr_arc = Arc::new(bind_addr);
 
     let total_transfers: i32 = pool.install(|| {
         configs_arc
@@ -140,7 +139,7 @@ fn main() {
                 }
                 let thread_id = rayon::current_thread_index().unwrap_or(idx);
                 // transfer_files is from iftpfm2::ftp_ops
-                transfer_files(cf_item, *delete_arc, thread_id, connect_timeout, insecure_skip_verify, *bind_addr_arc, *temp_dir_arc, *ram_threshold_arc)
+                transfer_files(cf_item, *delete_arc, thread_id, connect_timeout, insecure_skip_verify, *temp_dir_arc, *ram_threshold_arc)
             })
             .sum()
     });
