@@ -124,6 +124,13 @@ fn connect_and_login(
     // For SFTP with keyfile, password can be None
     let _ = log_with_thread(format!("[{}] Connecting to {}:{}...", proto, host, port), Some(thread_id));
 
+    if let Some(ref addr) = bind_addr {
+        let _ = log_with_thread(
+            format!("[{}] Binding {} local address to {}", proto, server_type, addr),
+            Some(thread_id),
+        );
+    }
+
     let mut client = match Client::connect(proto, host, port, timeout, insecure_skip_verify, bind_addr, login, password.map(|s| s.as_str()), keyfile, keyfile_passphrase) {
         Ok(c) => {
             let _ = log_with_thread(format!("[{}] Connected successfully", proto), Some(thread_id));
