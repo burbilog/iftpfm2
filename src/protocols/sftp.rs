@@ -43,7 +43,7 @@ impl FileTransferClient for SftpClient {
         host: &str,
         port: u16,
         timeout: Duration,
-        _config: &ProtocolConfig,
+        config: &ProtocolConfig,
         _user: &str,
         password: Option<&str>,
         keyfile_path: Option<&str>,
@@ -82,7 +82,7 @@ impl FileTransferClient for SftpClient {
         }
 
         // Try each address until one succeeds
-        let bind = _config.bind_addr;
+        let bind = config.bind_addr;
         let mut last_error = None;
         for addr in addrs {
             // TCP connect with optional bind

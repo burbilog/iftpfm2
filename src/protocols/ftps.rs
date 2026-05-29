@@ -154,9 +154,8 @@ impl FileTransferClient for FtpsClient {
                 }
             };
 
-            // Create FTP stream from connected TCP
-            // Use RustlsFtpStream::connect_with_stream to get ImplFtpStream<RustlsStream>
-            // which is needed for into_secure() with RustlsConnector
+            // Create plain FTP stream from connected TCP, then upgrade to TLS below
+            // via into_secure() with RustlsConnector
             let plain_stream = match RustlsFtpStream::connect_with_stream(tcp) {
                 Ok(s) => s,
                 Err(e) => {
@@ -185,7 +184,7 @@ impl FileTransferClient for FtpsClient {
                     });
 
                     // Enable data channel protection (PROT P) for secure data transfer
-                    let _ = stream.custom_command("PROT P", &[suppaftp::Status::CommandOk])?;
+                    stream.custom_command("PROT P", &[suppaftp::Status::CommandOk])?;
                     stream.set_mode(Mode::Passive);
                     stream.set_passive_nat_workaround(true);
                     return Ok(FtpsClient { stream });
