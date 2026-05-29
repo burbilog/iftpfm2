@@ -145,6 +145,8 @@ Where:
 - `filename_regexp`: Regular expression pattern to match files (string)
 - `tz_from`: Timezone offset for source server MDTM timestamps (optional, default: `"utc"`)
 - `tz_to`: Timezone offset for target server timestamps (optional, default: `"utc"`)
+- `bind_from`: Local IP address to bind for source server connections (optional, default: OS chooses automatically)
+- `bind_to`: Local IP address to bind for target server connections (optional, default: OS chooses automatically)
 
 Timezone offset formats: `"utc"`, `"+03:00"`, `"-05:30"`, `"+0300"`, `"+3"`, `"+03"`. Use `tz_from` when the source FTP server returns local time instead of UTC in MDTM responses — this ensures accurate age-based filtering. Not needed for SFTP (mtime is always UTC).
 
@@ -264,6 +266,12 @@ FTP server in a non-UTC timezone (e.g., Moscow, UTC+3) returning local time in M
 {"host_from":"ftp.moscow.local","port_from":21,"login_from":"user1","password_from":"pass1","path_from":"/outgoing","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"pass2","path_to":"/incoming","age":3600,"filename_regexp":".*","tz_from":"+03:00"}
 ```
 
+Multi-homed server with bind addresses (source and target on different network interfaces):
+
+```
+{"host_from":"10.0.1.100","port_from":21,"login_from":"user1","password_from":"pass1","path_from":"/outgoing","bind_from":"192.168.1.10","host_to":"10.0.2.200","port_to":21,"login_to":"user2","password_to":"pass2","path_to":"/incoming","bind_to":"192.168.2.10","age":3600,"filename_regexp":".*\\.csv$"}
+```
+
 Testing
 ======
 
@@ -283,6 +291,7 @@ This runs:
 - Temp directory test (`test_temp_dir.sh`)
 - PID handling test (`test_pid.sh`)
 - RAM threshold test (`test_ram_threshold.sh`)
+- Bind address test (`test_bind.sh`)
 
 To run SFTP tests (requires Docker):
 

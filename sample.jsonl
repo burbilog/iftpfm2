@@ -9,17 +9,23 @@
 # login_from: the login to use to connect to the FTP server to transfer files from
 # password_from: the password to use to connect to the FTP server to transfer files from
 # path_from: the path on the FTP server to transfer files from
-# proto_from: source protocol - "ftp" (default) or "ftps"
+# proto_from: source protocol - "ftp" (default), "ftps", or "sftp"
 # host_to: the IP address/hostname of the FTP server to transfer files to
 # port_to: the port of the FTP server to transfer files to
 # login_to: the login to use to connect to the FTP server to transfer files to
 # password_to: the password to use to connect to the FTP server to transfer files to
 # path_to: the path on the FTP server to transfer files to
-# proto_to: target protocol - "ftp" (default) or "ftps"
+# proto_to: target protocol - "ftp" (default), "ftps", or "sftp"
 # age: the age in seconds of the files to transfer, files younger than age seconds are ignored
 # filename_regexp: regular expression pattern to match files in specified source path (string)
 # tz_from: timezone offset for source server MDTM timestamps (default: "utc"). Formats: "+03:00", "-05:30", "+0300", "+3", "utc"
 # tz_to: timezone offset for target server timestamps (default: "utc"). Same formats as tz_from
+# keyfile_from: path to SSH private key for SFTP source auth (optional, mutually exclusive with password_from for SFTP)
+# keyfile_pass_from: passphrase for SSH private key (optional, only used with keyfile_from)
+# keyfile_to: path to SSH private key for SFTP destination auth (optional, mutually exclusive with password_to for SFTP)
+# keyfile_pass_to: passphrase for SSH private key (optional, only used with keyfile_to)
+# bind_from: local IP address to bind for source server connections (optional, default: OS chooses automatically)
+# bind_to: local IP address to bind for target server connections (optional, default: OS chooses automatically)
 
 # This is a config line to transfer all files older than 1 day from 192.168.0.1 to 192.168.0.2
 {"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/to/source/dir/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path/to/target/dir","age":86400,"filename_regexp":".*"}
