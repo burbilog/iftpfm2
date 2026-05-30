@@ -2,6 +2,13 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.4.14] - 2026-05-30
+
+### Changed
+- **Full URL in connection/login/CWD error messages** — `connect_and_login()` now includes `{proto}://{login}:{password}@{host}:{port}{path}` in all three error paths (connect, login, CWD) instead of just host/port
+
+---
+
 ## [2.4.13] - 2026-05-29
 
 ### Added
@@ -513,6 +520,7 @@ After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
 
 ## Version Reference
 
+- **2.4.14** - Full URL with credentials in connect/login/CWD error messages
 - **2.4.13** - Bind address for outgoing connections (bind_from/bind_to) per JSONL config
 - **2.4.12** - Timezone offset support (tz_from/tz_to) for MDTM timestamp correction
 - **2.4.11** - Thread-local session context for improved log tracing with [Tn] [hash] format

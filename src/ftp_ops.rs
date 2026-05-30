@@ -138,8 +138,8 @@ fn connect_and_login(
         }
         Err(e) => {
             return Err(format!(
-                "Error connecting to {} FTP server {}:{} ({}s timeout): {}",
-                server_type, host, port, timeout.as_secs(), e
+                "Error connecting to {} {}://{}:{}@{}:{}{} ({}s timeout): {}",
+                server_type, proto, login, password.map(|s| s.as_str()).unwrap_or(""), host, port, path, timeout.as_secs(), e
             ));
         }
     };
@@ -159,16 +159,16 @@ fn connect_and_login(
     if let Err(e) = client.login(login, pwd) {
         let _ = client.quit();
         return Err(format!(
-            "Error logging into {} FTP server {}: {}",
-            server_type, host, e
+            "Error logging into {} {}://{}:{}@{}:{}{}: {}",
+            server_type, proto, login, pwd, host, port, path, e
         ));
     }
 
     if let Err(e) = client.cwd(path) {
         let _ = client.quit();
         return Err(format!(
-            "Error changing directory on {} FTP server {} (user '{}', path '{}'): {}",
-            server_type, host, login, path, e
+            "Error changing directory on {} {}://{}:{}@{}:{}{}: {}",
+            server_type, proto, login, pwd, host, port, path, e
         ));
     }
 
