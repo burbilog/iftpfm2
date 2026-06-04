@@ -27,6 +27,7 @@ all:
 # install into ~/.cargo/bin
 install: release
 	cargo install --path .
+	cargo install --path iftpfm2-web
 
 # build debug version
 debug:
