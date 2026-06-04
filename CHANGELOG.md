@@ -2,6 +2,16 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.5.1] - 2026-06-04
+
+### Added
+
+- **iftpfm2-web**: Duplicate button — clone existing config entry as a starting point for new entries.
+- **iftpfm2-web**: Swap Source ↔ Target button — instantly flip all 10 directional field pairs (proto, host, port, login, password, path, keyfile, keyfile_pass, tz, bind) in the config editor modal. Works in both Create and Edit modes.
+- `test_web_agent.sh`: Test 12 (duplicate entry), Test 13 (swap source/target).
+
+---
+
 ## [2.5.0] - 2026-06-04
 
 ### Added
@@ -565,6 +575,7 @@ After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
 
 ## Version Reference
 
+- **2.5.1** - Duplicate and Swap buttons for iftpfm2-web config editor, UI tests for new features
 - **2.5.0** - Web UI for JSONL config editing (iftpfm2-web), library extensions for config CRUD
 - **2.4.14** - Full URL with credentials in connect/login/CWD error messages
 - **2.4.13** - Bind address for outgoing connections (bind_from/bind_to) per JSONL config
