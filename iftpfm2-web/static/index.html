@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iftpfm2 — Config Editor</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --accent2: #533483;
+  --text: #eaeaea;
+  --text-dim: #a0a0b0;
+  --border: #2a2a4a;
+  --success: #4ecca3;
+  --warning: #f9ed69;
+  --error: #e94560;
+  --radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+header {
+  background: var(--surface);
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header h1 { font-size: 20px; font-weight: 600; }
+header h1 span { color: var(--accent); }
+header .info { color: var(--text-dim); font-size: 13px; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #d63a50; }
+.btn-secondary { background: var(--surface2); color: var(--text); }
+.btn-secondary:hover { background: #1a4580; }
+.btn-success { background: var(--success); color: #000; }
+.btn-success:hover { opacity: 0.9; }
+.btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
+.btn-danger:hover { background: var(--error); color: #fff; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+.table-wrap {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: var(--surface2); font-weight: 600; font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+tr:hover td { background: rgba(255,255,255,0.03); }
+.proto-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.proto-ftp { background: #2196f3; color: #fff; }
+.proto-ftps { background: var(--success); color: #000; }
+.proto-sftp { background: var(--accent2); color: #fff; }
+.actions { display: flex; gap: 6px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.search {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  color: var(--text);
+  font-size: 14px;
+  width: 300px;
+}
+.search:focus { outline: none; border-color: var(--accent); }
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 40px;
+  overflow-y: auto;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--surface);
+  border-radius: 12px;
+  width: 800px;
+  max-width: 95vw;
+  border: 1px solid var(--border);
+  margin-bottom: 40px;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { font-size: 18px; }
+.modal-body { padding: 24px; }
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group label { font-size: 12px; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+.form-group input, .form-group select, .form-group textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 14px;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.form-group textarea { resize: vertical; min-height: 60px; font-family: monospace; }
+.section-title {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.pw-wrap { display: flex; gap: 4px; }
+.pw-wrap input { flex: 1; }
+.pw-toggle {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 18px;
+}
+.regex-test { display: flex; gap: 8px; align-items: center; }
+.regex-test input { flex: 1; }
+.regex-result { font-size: 12px; min-width: 60px; }
+.regex-match { color: var(--success); }
+.regex-nomatch { color: var(--error); }
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+/* Notification */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  color: #fff;
+  font-size: 14px;
+  z-index: 2000;
+  animation: slideIn 0.3s;
+  max-width: 400px;
+}
+.notification.success { background: var(--success); color: #000; }
+.notification.error { background: var(--error); }
+.notification.warning { background: var(--warning); color: #000; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.loading { text-align: center; padding: 40px; color: var(--text-dim); }
+.delete-confirm {
+  background: var(--error);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>iftpfm2</span> Config Editor</h1>
+  <div class="info" id="headerInfo">Loading...</div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div style="display:flex;gap:12px;align-items:center">
+      <input type="text" class="search" id="search" placeholder="Search by host, path, comment...">
+      <button class="btn btn-primary" onclick="openCreate()">+ Add Config</button>
+    </div>
+    <button class="btn btn-secondary" onclick="loadConfigs()">Refresh</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Protocol</th>
+          <th>Source</th>
+          <th>Target</th>
+          <th>Age</th>
+          <th>Regex</th>
+          <th>Comment</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="loading" id="loading" style="display:none">Loading...</div>
+</main>
+
+<!-- Edit/Create Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Add Config</h2>
+      <button class="btn btn-sm btn-secondary" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <!-- Comment -->
+        <div class="form-group full">
+          <label>Comment</label>
+          <textarea id="f_comment" rows="2" placeholder="Optional comment..."></textarea>
+        </div>
+
+        <!-- Source -->
+        <div class="section-title">Source (From)</div>
+        <div class="form-group">
+          <label>Protocol</label>
+          <select id="f_proto_from">
+            <option value="ftp">FTP</option>
+            <option value="ftps">FTPS</option>
+            <option value="sftp">SFTP</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Host</label>
+          <input id="f_host_from" placeholder="192.168.0.1">
+        </div>
+        <div class="form-group">
+          <label>Port</label>
+          <input id="f_port_from" type="number" value="21">
+        </div>
+        <div class="form-group">
+          <label>Login</label>
+          <input id="f_login_from" placeholder="username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <div class="pw-wrap">
+            <input id="f_password_from" type="password" placeholder="password">
+            <button class="pw-toggle" onclick="togglePw('f_password_from')">&#128065;</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Path</label>
+          <input id="f_path_from" placeholder="/path/to/source/">
+        </div>
+        <div class="form-group">
+          <label>Keyfile (SFTP)</label>
+          <input id="f_keyfile_from" placeholder="/path/to/key">
+        </div>
+        <div class="form-group">
+          <label>Keyfile Passphrase (SFTP)</label>
+          <div class="pw-wrap">
+            <input id="f_keyfile_pass_from" type="password" placeholder="optional">
+            <button class="pw-toggle" onclick="togglePw('f_keyfile_pass_from')">&#128065;</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>TZ Offset</label>
+          <input id="f_tz_from" placeholder="utc or +03:00">
+        </div>
+        <div class="form-group">
+          <label>Bind Address</label>
+          <input id="f_bind_from" placeholder="optional, e.g. 192.168.1.1">
+        </div>
+
+        <!-- Target -->
+        <div class="section-title">Target (To)</div>
+        <div class="form-group">
+          <label>Protocol</label>
+          <select id="f_proto_to">
+            <option value="ftp">FTP</option>
+            <option value="ftps">FTPS</option>
+            <option value="sftp">SFTP</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Host</label>
+          <input id="f_host_to" placeholder="192.168.0.2">
+        </div>
+        <div class="form-group">
+          <label>Port</label>
+          <input id="f_port_to" type="number" value="21">
+        </div>
+        <div class="form-group">
+          <label>Login</label>
+          <input id="f_login_to" placeholder="username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <div class="pw-wrap">
+            <input id="f_password_to" type="password" placeholder="password">
+            <button class="pw-toggle" onclick="togglePw('f_password_to')">&#128065;</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Path</label>
+          <input id="f_path_to" placeholder="/path/to/target/">
+        </div>
+        <div class="form-group">
+          <label>Keyfile (SFTP)</label>
+          <input id="f_keyfile_to" placeholder="/path/to/key">
+        </div>
+        <div class="form-group">
+          <label>Keyfile Passphrase (SFTP)</label>
+          <div class="pw-wrap">
+            <input id="f_keyfile_pass_to" type="password" placeholder="optional">
+            <button class="pw-toggle" onclick="togglePw('f_keyfile_pass_to')">&#128065;</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>TZ Offset</label>
+          <input id="f_tz_to" placeholder="utc or +03:00">
+        </div>
+        <div class="form-group">
+          <label>Bind Address</label>
+          <input id="f_bind_to" placeholder="optional, e.g. 192.168.1.1">
+        </div>
+
+        <!-- Common -->
+        <div class="section-title">Transfer Settings</div>
+        <div class="form-group">
+          <label>File Age (seconds)</label>
+          <input id="f_age" type="number" value="86400" min="0">
+        </div>
+        <div class="form-group">
+          <label>Filename Regex</label>
+          <div class="regex-test">
+            <input id="f_filename_regexp" value=".*" oninput="testRegex()">
+            <span class="regex-result" id="regexResult"></span>
+          </div>
+        </div>
+        <div class="form-group full">
+          <label>Regex Test Input</label>
+          <input id="f_regex_test" placeholder="test filename here..." oninput="testRegex()">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-success" onclick="saveConfig()" id="saveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let configs = [];
+let editIndex = -1;
+let deletePending = -1;
+
+function notify(msg, type='success') {
+  const n = document.createElement('div');
+  n.className = 'notification ' + type;
+  n.textContent = msg;
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 3000);
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(path, {credentials: 'include', ...opts});
+  if (res.status === 401) {
+    notify('Authentication required. Reload page and enter credentials.', 'error');
+    throw new Error('Unauthorized');
+  }
+  return res;
+}
+
+async function loadConfigs() {
+  document.getElementById('loading').style.display = '';
+  try {
+    const res = await api('/api/configs');
+    const data = await res.json();
+    if (data.error) { notify(data.error, 'error'); return; }
+    configs = data;
+    render();
+    document.getElementById('headerInfo').textContent = configs.length + ' config entries loaded';
+  } catch(e) {
+    notify('Failed to load: ' + e.message, 'error');
+  }
+  document.getElementById('loading').style.display = 'none';
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function formatAge(seconds) {
+  if (seconds === 0) return 'any';
+  if (seconds < 60) return seconds + 's';
+  if (seconds < 3600) return Math.floor(seconds/60) + 'm';
+  if (seconds < 86400) return Math.floor(seconds/3600) + 'h';
+  return Math.floor(seconds/86400) + 'd';
+}
+
+function protoBadge(p) {
+  return `<span class="proto-badge proto-${p}">${p.toUpperCase()}</span>`;
+}
+
+function render() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const tbody = document.getElementById('tbody');
+  let html = '';
+
+  configs.forEach((c, i) => {
+    const src = `${c.config.host_from}:${c.config.port_from}`;
+    const dst = `${c.config.host_to}:${c.config.port_to}`;
+    const searchStr = `${c.comment} ${c.config.host_from} ${c.config.host_to} ${c.config.path_from} ${c.config.path_to}`.toLowerCase();
+    if (search && !searchStr.includes(search)) return;
+
+    const comment = escapeHtml(c.comment).replace(/\n/g, '<br>');
+    const commentShort = comment.length > 40 ? comment.substring(0, 40) + '...' : comment;
+
+    html += `<tr>
+      <td>${i}</td>
+      <td>${protoBadge(c.config.proto_from)} &rarr; ${protoBadge(c.config.proto_to)}</td>
+      <td title="${escapeHtml(c.config.path_from)}">${escapeHtml(src)}<br><small style="color:var(--text-dim)">${escapeHtml(c.config.path_from)}</small></td>
+      <td title="${escapeHtml(c.config.path_to)}">${escapeHtml(dst)}<br><small style="color:var(--text-dim)">${escapeHtml(c.config.path_to)}</small></td>
+      <td>${formatAge(c.config.age)}</td>
+      <td><code style="font-size:12px">${escapeHtml(c.config.filename_regexp)}</code></td>
+      <td>${commentShort}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-secondary" onclick="openEdit(${i})">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDelete(${i})" id="delbtn${i}">Delete</button>
+      </td>
+    </tr>`;
+  });
+
+  if (!html) {
+    html = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:40px">No configs found</td></tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+function openCreate() {
+  editIndex = -1;
+  document.getElementById('modalTitle').textContent = 'Add Config';
+  clearForm();
+  openModal();
+}
+
+function openEdit(i) {
+  editIndex = i;
+  document.getElementById('modalTitle').textContent = 'Edit Config #' + i;
+  const c = configs[i];
+  document.getElementById('f_comment').value = c.comment || '';
+  fillForm(c.config);
+  openModal();
+}
+
+function openModal() {
+  document.getElementById('modal').classList.add('active');
+  testRegex();
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+function clearForm() {
+  const ids = ['f_comment','f_host_from','f_port_from','f_login_from','f_password_from','f_path_from',
+    'f_keyfile_from','f_keyfile_pass_from','f_tz_from','f_bind_from',
+    'f_host_to','f_port_to','f_login_to','f_password_to','f_path_to',
+    'f_keyfile_to','f_keyfile_pass_to','f_tz_to','f_bind_to',
+    'f_filename_regexp','f_regex_test'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (id === 'f_port_from' || id === 'f_port_to') el.value = '21';
+      else if (id === 'f_age') el.value = '86400';
+      else if (id === 'f_filename_regexp') el.value = '.*';
+      else if (id === 'f_tz_from' || id === 'f_tz_to') el.value = 'utc';
+      else el.value = '';
+    }
+  });
+  document.getElementById('f_proto_from').value = 'ftp';
+  document.getElementById('f_proto_to').value = 'ftp';
+}
+
+function fillForm(c) {
+  document.getElementById('f_proto_from').value = c.proto_from || 'ftp';
+  document.getElementById('f_host_from').value = c.host_from || '';
+  document.getElementById('f_port_from').value = c.port_from || 21;
+  document.getElementById('f_login_from').value = c.login_from || '';
+  document.getElementById('f_password_from').value = c.password_from || '';
+  document.getElementById('f_path_from').value = c.path_from || '';
+  document.getElementById('f_keyfile_from').value = c.keyfile_from || '';
+  document.getElementById('f_keyfile_pass_from').value = c.keyfile_pass_from || '';
+  document.getElementById('f_tz_from').value = c.tz_from || 'utc';
+  document.getElementById('f_bind_from').value = c.bind_from || '';
+  document.getElementById('f_proto_to').value = c.proto_to || 'ftp';
+  document.getElementById('f_host_to').value = c.host_to || '';
+  document.getElementById('f_port_to').value = c.port_to || 21;
+  document.getElementById('f_login_to').value = c.login_to || '';
+  document.getElementById('f_password_to').value = c.password_to || '';
+  document.getElementById('f_path_to').value = c.path_to || '';
+  document.getElementById('f_keyfile_to').value = c.keyfile_to || '';
+  document.getElementById('f_keyfile_pass_to').value = c.keyfile_pass_to || '';
+  document.getElementById('f_tz_to').value = c.tz_to || 'utc';
+  document.getElementById('f_bind_to').value = c.bind_to || '';
+  document.getElementById('f_age').value = c.age ?? 86400;
+  document.getElementById('f_filename_regexp').value = c.filename_regexp || '.*';
+}
+
+function getFormData() {
+  const obj = {
+    proto_from: document.getElementById('f_proto_from').value,
+    host_from: document.getElementById('f_host_from').value,
+    port_from: parseInt(document.getElementById('f_port_from').value) || 21,
+    login_from: document.getElementById('f_login_from').value,
+    password_from: document.getElementById('f_password_from').value || null,
+    path_from: document.getElementById('f_path_from').value,
+    keyfile_from: document.getElementById('f_keyfile_from').value || null,
+    keyfile_pass_from: document.getElementById('f_keyfile_pass_from').value || null,
+    tz_from: document.getElementById('f_tz_from').value || 'utc',
+    bind_from: document.getElementById('f_bind_from').value || null,
+    proto_to: document.getElementById('f_proto_to').value,
+    host_to: document.getElementById('f_host_to').value,
+    port_to: parseInt(document.getElementById('f_port_to').value) || 21,
+    login_to: document.getElementById('f_login_to').value,
+    password_to: document.getElementById('f_password_to').value || null,
+    path_to: document.getElementById('f_path_to').value,
+    keyfile_to: document.getElementById('f_keyfile_to').value || null,
+    keyfile_pass_to: document.getElementById('f_keyfile_pass_to').value || null,
+    tz_to: document.getElementById('f_tz_to').value || 'utc',
+    bind_to: document.getElementById('f_bind_to').value || null,
+    age: parseInt(document.getElementById('f_age').value) || 0,
+    filename_regexp: document.getElementById('f_filename_regexp').value || '.*',
+  };
+  // Remove null optional fields
+  for (const key of ['password_from','password_to','keyfile_from','keyfile_to',
+                     'keyfile_pass_from','keyfile_pass_to','bind_from','bind_to']) {
+    if (obj[key] === null || obj[key] === '') delete obj[key];
+  }
+  return obj;
+}
+
+async function saveConfig() {
+  const config = getFormData();
+  const comment = document.getElementById('f_comment').value;
+  const body = { comment, config };
+
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+
+  try {
+    let res;
+    if (editIndex >= 0) {
+      res = await api('/api/configs/' + editIndex, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } else {
+      res = await api('/api/configs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
+    const data = await res.json();
+    if (!res.ok) {
+      notify(data.error || 'Save failed', 'error');
+      return;
+    }
+    notify(editIndex >= 0 ? 'Config updated' : 'Config created');
+    closeModal();
+    await loadConfigs();
+  } catch(e) {
+    notify('Error: ' + e.message, 'error');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save';
+  }
+}
+
+function confirmDelete(i) {
+  if (deletePending === i) {
+    doDelete(i);
+    deletePending = -1;
+  } else {
+    deletePending = i;
+    const btn = document.getElementById('delbtn' + i);
+    if (btn) {
+      btn.textContent = 'Confirm?';
+      btn.className = 'delete-confirm';
+      setTimeout(() => {
+        if (deletePending === i) {
+          deletePending = -1;
+          if (btn) { btn.textContent = 'Delete'; btn.className = 'btn btn-sm btn-danger'; }
+        }
+      }, 3000);
+    }
+  }
+}
+
+async function doDelete(i) {
+  try {
+    const res = await api('/api/configs/' + i, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) { notify(data.error || 'Delete failed', 'error'); return; }
+    notify('Config #' + i + ' deleted');
+    await loadConfigs();
+  } catch(e) {
+    notify('Error: ' + e.message, 'error');
+  }
+}
+
+function testRegex() {
+  const pattern = document.getElementById('f_filename_regexp').value;
+  const testStr = document.getElementById('f_regex_test').value;
+  const result = document.getElementById('regexResult');
+  if (!pattern || !testStr) { result.textContent = ''; return; }
+  try {
+    const re = new RegExp(pattern);
+    if (re.test(testStr)) {
+      result.textContent = 'MATCH';
+      result.className = 'regex-result regex-match';
+    } else {
+      result.textContent = 'no match';
+      result.className = 'regex-result regex-nomatch';
+    }
+  } catch(e) {
+    result.textContent = 'invalid';
+    result.className = 'regex-result regex-nomatch';
+  }
+}
+
+function togglePw(id) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// Search filter
+document.getElementById('search').addEventListener('input', render);
+
+// Init
+loadConfigs();
+</script>
+</body>
+</html>

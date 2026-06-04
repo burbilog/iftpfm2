@@ -32,6 +32,14 @@ cargo test test_name
 # Run tests for specific binary
 cargo test --bin migrate_csv_to_jsonl
 
+# Build web UI
+make web              # Release
+make web-debug        # Debug
+
+# Run web tests
+make test-web         # API tests (34 curl-based tests)
+make test-web-ui      # UI tests (agent-browser)
+
 # Generate documentation
 make doc
 # or
@@ -80,6 +88,17 @@ cargo doc --open
 - `test_sftp_keys_docker.sh` - SFTP SSH key authentication test (in `make test` when Docker available)
   - Prerequisites: Docker with `atmoz/sftp` container
   - Tests key auth with and without passphrase
+- `test_web.sh` - Web API tests (34 curl-based tests, in `make test`)
+  - Tests Basic Auth (wrong credentials, valid credentials)
+  - Tests CRUD operations (Create/Read/Update/Delete)
+  - Tests `/api/validate` endpoint
+  - Tests read-only mode (blocks write operations)
+  - Tests config persistence across server restarts
+  - Tests SFTP keyfile configuration
+  - Tests JSONL format preservation
+- `test_web_agent.sh` - Web UI tests (in `make test` when `agent-browser` available)
+  - Prerequisites: `agent-browser` CLI tool
+  - Tests page loading, edit/create/delete operations, search/filter, protocol handling, regex testing, password toggle, keyboard shortcuts
 
 ## Project Architecture
 
@@ -105,6 +124,12 @@ cargo doc --open
 
 **Migration script (separate binary):**
 - `migrate_csv_to_jsonl.rs` - Converts legacy CSV configs to JSONL format
+
+**Web UI (separate crate — `iftpfm2-web/`):**
+- `iftpfm2-web/src/main.rs` - Axum-based web server for JSONL config editing
+- `iftpfm2-web/static/index.html` - SPA frontend (vanilla JS, dark theme, embedded via `include_str!`)
+- `iftpfm2-web/Cargo.toml` - Dependencies: axum, tokio, tower-http (cors), base64, constant_time_eq
+- Shares `Config`, `ConfigEntry`, `parse_config_entries()`, `write_config_entries()`, `validate_for_edit()` from parent crate
 
 ### Key Architectural Patterns
 
@@ -237,7 +262,7 @@ cargo doc --open
 - `test_pid.sh` - Tests PID file creation and nix-based signaling
 - SFTP tests: `make test-sftp` (separate target, uses Docker atmoz/sftp container)
 - **Run all tests (unit + integration):** `make test` in the project root directory
-  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_sftp_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, `./test_pid.sh`, `./test_pid_no_xdg.sh`, `./test_ram_threshold.sh`, and `./test_bind.sh`, plus Docker tests (`test_sftp_docker.sh`, `test_sftp_keys_docker.sh`) if Docker is available
+  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_sftp_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, `./test_pid.sh`, `./test_pid_no_xdg.sh`, `./test_ram_threshold.sh`, and `./test_bind.sh`, plus Docker tests (`test_sftp_docker.sh`, `test_sftp_keys_docker.sh`) if Docker is available, plus web API tests (`test_web.sh`) and web UI tests (`test_web_agent.sh`) if `agent-browser` is available
   - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
 
 **Connection Timeout:**
@@ -260,6 +285,21 @@ cargo doc --open
 **Building:**
 - To check "if it builds" — use the Task tool: `cargo build`, return only success/errors.
 - If you need to fix compilation errors — run directly to see the full output.
+
+**Web UI (`iftpfm2-web`):**
+- Separate crate in `iftpfm2-web/` directory, depends on parent `iftpfm2` library
+- Axum + Tokio async web server
+- SPA frontend embedded via `include_str!("../static/index.html")` — single binary, no external files
+- API endpoints: `GET /api/configs`, `GET/PUT/DELETE /api/configs/{index}`, `POST /api/configs`, `POST /api/validate`
+- Basic Auth (optional): `--user`/`--password` CLI flags or `IFTPFM2_WEB_USER`/`IFTPFM2_WEB_PASSWORD` env vars
+  - Also accepts `IFTPM2_WEB_USER`/`IFTPM2_WEB_PASSWORD` (legacy typo fallback)
+  - Uses `constant_time_eq` for password comparison (timing attack prevention)
+- Read-only mode: `--readonly` flag blocks POST/PUT/DELETE
+- Default listen: `127.0.0.1:3000` (configurable via `--listen`)
+- Config modifications are atomic: validation → memory update → disk write; rollback on write failure
+- Build: `make web` (release), `make web-debug` (debug), or `cargo build --bin iftpfm2-web --package iftpfm2-web`
+- Tests: `make test-web` (API), `make test-web-ui` (UI with agent-browser)
+- Install: `make install` installs both `iftpfm2` and `iftpfm2-web` to `~/.cargo/bin`
 
 ## Common Issues to Avoid
 
@@ -303,3 +343,33 @@ cargo doc --open
 - When not specified (default): OS chooses source address automatically (standard behavior)
 - Uses `socket2` crate for bind-then-connect pattern
 - Address validated as `IpAddr` during JSONL config parsing (serde deserialization)
+
+## Web UI CLI Flags (`iftpfm2-web`)
+
+| Flag | Argument | Description |
+|------|----------|-------------|
+| `--config` | `<path>` | Path to JSONL config file (required) |
+| `--listen` | `<addr:port>` | Listen address:port (default: `127.0.0.1:3000`) |
+| `--readonly` | — | Read-only mode (blocks write operations) |
+| `--user` | `<login>` | Basic Auth username (env: `IFTPFM2_WEB_USER` or `IFTPM2_WEB_USER`) |
+| `--password` | `<pass>` | Basic Auth password (env: `IFTPFM2_WEB_PASSWORD` or `IFTPM2_WEB_PASSWORD`) |
+
+**Web API Endpoints:**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Serve SPA frontend (HTML) |
+| GET | `/api/configs` | List all config entries |
+| GET | `/api/configs/{index}` | Get config by 0-based index |
+| POST | `/api/configs` | Create new config entry |
+| PUT | `/api/configs/{index}` | Update config entry |
+| DELETE | `/api/configs/{index}` | Delete config entry |
+| POST | `/api/validate` | Validate config without saving |
+
+**Web UI Implementation Notes:**
+- SPA is vanilla JavaScript, no framework — embedded in binary via `include_str!("../static/index.html")`
+- State held in `AppState`: `config_path`, `readonly`, `auth_user`, `auth_password`, `entries: Mutex<Vec<ConfigEntry>>`
+- Config modifications are atomic: validate → update memory → write disk; rollback in-memory on disk write failure
+- CORS enabled permissive (`CorsLayer::permissive()`) for development
+- Password comparison uses `constant_time_eq` to prevent timing attacks
+- All write endpoints check `readonly` flag and return 403 when enabled

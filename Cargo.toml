@@ -4,6 +4,10 @@ version = "2.4.14"
 authors = ["Roman V. Isaev <rm@aroma.ru>"]
 edition = "2021"
 
+[workspace]
+members = [".", "iftpfm2-web"]
+resolver = "2"
+
 [lib]
 name = "iftpfm2"
 

@@ -8,14 +8,18 @@ all:
 	@echo "  debug      - Build debug version (cargo build)"
 	@echo "  release    - Build release version (cargo build --release)"
 	@echo "  install    - Install release to ~/.cargo/bin"
+	@echo "  web        - Build web UI binary (release)"
+	@echo "  web-debug  - Build web UI binary (debug)"
 	@echo ""
 	@echo "Test targets:"
-	@echo "  test       - Run all tests (unit + integration, including Docker if available)"
+	@echo "  test       - Run all tests (unit + integration + web, including Docker if available)"
 	@echo "  test-sftp              - SFTP password authentication tests (Docker)"
 	@echo "  test-sftp-keys         - SFTP SSH key authentication tests (Docker)"
 	@echo "  test-temp              - Temp directory and debug logging test"
 	@echo "  test-pid               - PID file handling test"
 	@echo "  test-pid-no-xdg        - PID handling test WITHOUT XDG_RUNTIME_DIR"
+	@echo "  test-web               - Web API tests (curl-based)"
+	@echo "  test-web-ui            - Web UI tests (agent-browser, skip if not installed)"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  cloc       - Count lines of code (requires cloc utility)"
@@ -23,6 +27,7 @@ all:
 # install into ~/.cargo/bin
 install: release
 	cargo install --path .
+	cargo install --path iftpfm2-web
 
 # build debug version
 debug:
@@ -59,6 +64,17 @@ test:
 		echo "  - test_sftp_keys_docker.sh (SFTP SSH key auth)"; \
 		echo "=================================================="; \
 	}
+	@echo ""
+	@echo "Running web API tests..."
+	cargo build --bin iftpfm2-web --package iftpfm2-web
+	./test_web.sh
+	@echo ""
+	@command -v agent-browser >/dev/null 2>&1 && { \
+		echo "Running web UI tests (agent-browser)..."; \
+		./test_web_agent.sh; \
+	} || { \
+		echo "SKIP: agent-browser not found — skipping web UI tests"; \
+	}
 
 # run SFTP password authentication tests with Docker (also included in main test target if Docker is available)
 test-sftp:
@@ -92,3 +108,21 @@ cloc:
 	@cloc --exclude-dir=.git,.claude,target \
 		--exclude-list-file=.gitignore \
 		.
+
+# build web UI binary (release)
+web:
+	cargo build --bin iftpfm2-web --package iftpfm2-web --release
+
+# build web UI binary (debug)
+web-debug:
+	cargo build --bin iftpfm2-web --package iftpfm2-web
+
+# run web API tests (curl-based, 34 tests)
+test-web:
+	cargo build --bin iftpfm2-web --package iftpfm2-web
+	./test_web.sh
+
+# run web UI tests (agent-browser, skip if not installed)
+test-web-ui:
+	cargo build --bin iftpfm2-web --package iftpfm2-web
+	./test_web_agent.sh
