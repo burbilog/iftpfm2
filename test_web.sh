@@ -82,6 +82,14 @@ cat > "$CONFIG_FILE" << 'TESTEOF'
 {"host_from":"10.0.0.3","port_from":22,"login_from":"user3","password_from":"pass3","path_from":"/src2/","host_to":"10.0.0.4","port_to":22,"login_to":"user4","password_to":"pass4","path_to":"/dst2/","age":7200,"filename_regexp":".*"}
 TESTEOF
 
+# ── Kill stale servers on test ports ──────────────────────────────────
+if command -v fuser &>/dev/null; then
+    fuser -k 13579/tcp 13580/tcp 2>/dev/null || true
+elif command -v lsof &>/dev/null; then
+    lsof -ti:13579,13580 | xargs -r kill 2>/dev/null || true
+fi
+sleep 0.3
+
 # ── Start server with auth ────────────────────────────────────────────
 info "Starting iftpfm2-web with Basic Auth on $BASE_URL..."
 ./target/debug/iftpfm2-web --config "$CONFIG_FILE" --listen "127.0.0.1:13579" \
