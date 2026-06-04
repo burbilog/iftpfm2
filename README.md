@@ -283,6 +283,8 @@ Web UI (iftpfm2-web)
 
 - **Single-page application** with dark theme UI (no external JS dependencies)
 - **Full CRUD** — create, view, edit, and delete config entries
+- **Duplicate** — clone existing config as a starting point for new entries
+- **Swap Source ↔ Target** — instantly flip all 10 directional field pairs (proto, host, port, login, password, path, keyfile, keyfile_pass, tz, bind)
 - **Real-time regex testing** — test filename patterns directly in the edit modal
 - **Protocol badges** — visual indicators for FTP/FTPS/SFTP protocols
 - **Password visibility toggles** — show/hide sensitive fields

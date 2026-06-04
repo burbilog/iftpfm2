@@ -98,7 +98,7 @@ cargo doc --open
   - Tests JSONL format preservation
 - `test_web_agent.sh` - Web UI tests (in `make test` when `agent-browser` available)
   - Prerequisites: `agent-browser` CLI tool
-  - Tests page loading, edit/create/delete operations, search/filter, protocol handling, regex testing, password toggle, keyboard shortcuts
+  - Tests page loading, edit/create/delete operations, search/filter, protocol handling, regex testing, password toggle, keyboard shortcuts, duplicate entry, swap source/target
 
 ## Project Architecture
 
