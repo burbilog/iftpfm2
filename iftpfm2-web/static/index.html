@@ -399,7 +399,7 @@ function notify(msg, type='success') {
 }
 
 async function api(path, opts={}) {
-  const res = await fetch(path, opts);
+  const res = await fetch(path, {credentials: 'include', ...opts});
   if (res.status === 401) {
     notify('Authentication required. Reload page and enter credentials.', 'error');
     throw new Error('Unauthorized');

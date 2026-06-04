@@ -322,8 +322,21 @@ async fn validate_config(
 
 // ── SPA frontend ──────────────────────────────────────────────────────
 
-async fn serve_index() -> Html<&'static str> {
-    Html(INDEX_HTML)
+async fn serve_index(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(_) = check_auth(&headers, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            [(
+                header::WWW_AUTHENTICATE,
+                header::HeaderValue::from_static(r#"Basic realm="iftpfm2""#),
+            )],
+            Html(""),
+        ).into_response();
+    }
+    Html(INDEX_HTML).into_response()
 }
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
