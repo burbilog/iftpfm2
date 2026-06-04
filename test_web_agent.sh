@@ -434,6 +434,41 @@ DISK_COUNT=$(grep -c "^{" "$CONFIG_FILE" 2>/dev/null || echo "0")
 if [ "$DISK_COUNT" = "3" ]; then pass "3 JSONL lines on disk"; else fail "Expected 3 lines, got $DISK_COUNT"; fi
 
 # ══════════════════════════════════════════════════════════════════════
+info "=== Test 13: Swap source/target ==="
+# ══════════════════════════════════════════════════════════════════════
+
+info "Test 13a: Open Edit on entry 0"
+runjs "document.querySelectorAll('#tbody tr:first-child button')[0].click()"
+agent-browser wait 500 >/dev/null 2>&1 || true
+assert_js "document.querySelector('.modal-overlay').classList.contains('active')" "true"
+
+info "Test 13b: Capture pre-swap values"
+capture_js "document.getElementById('f_host_from').value"
+HOST_FROM=$(read_result)
+capture_js "document.getElementById('f_host_to').value"
+HOST_TO=$(read_result)
+capture_js "document.getElementById('f_port_from').value"
+PORT_FROM=$(read_result)
+capture_js "document.getElementById('f_port_to').value"
+PORT_TO=$(read_result)
+
+info "Test 13c: Click Swap button"
+runjs "document.querySelector('.swap-row button').click()"
+agent-browser wait 300 >/dev/null 2>&1 || true
+
+info "Test 13d: Verify host swapped"
+assert_js "document.getElementById('f_host_from').value" "$HOST_TO"
+assert_js "document.getElementById('f_host_to').value" "$HOST_FROM"
+
+info "Test 13e: Verify port swapped"
+assert_js "document.getElementById('f_port_from').value" "$PORT_TO"
+assert_js "document.getElementById('f_port_to').value" "$PORT_FROM"
+
+info "Test 13f: Close modal without saving"
+runjs "document.querySelector('.modal-overlay').click()"
+agent-browser wait 300 >/dev/null 2>&1 || true
+
+# ══════════════════════════════════════════════════════════════════════
 echo ""
 echo "=================================================="
 if [ "$FAIL_COUNT" -eq 0 ]; then

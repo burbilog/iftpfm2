@@ -152,6 +152,12 @@ tr:hover td { background: rgba(255,255,255,0.03); }
   border-top: 1px solid var(--border);
   margin-top: 4px;
 }
+.swap-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
 .pw-wrap { display: flex; gap: 4px; }
 .pw-wrap input { flex: 1; }
 .pw-toggle {
@@ -304,6 +310,10 @@ tr:hover td { background: rgba(255,255,255,0.03); }
         <div class="form-group">
           <label>Bind Address</label>
           <input id="f_bind_from" placeholder="optional, e.g. 192.168.1.1">
+        </div>
+
+        <div class="swap-row">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="swapSourceTarget()" title="Swap source and target fields">⇄ Swap Source / Target</button>
         </div>
 
         <!-- Target -->
@@ -500,6 +510,28 @@ function openDuplicate(i) {
   document.getElementById('f_comment').value = (c.comment ? c.comment + ' (copy)' : '');
   fillForm(c.config);
   openModal();
+}
+
+function swapSourceTarget() {
+  const pairs = [
+    ['f_proto_from', 'f_proto_to'],
+    ['f_host_from', 'f_host_to'],
+    ['f_port_from', 'f_port_to'],
+    ['f_login_from', 'f_login_to'],
+    ['f_password_from', 'f_password_to'],
+    ['f_path_from', 'f_path_to'],
+    ['f_keyfile_from', 'f_keyfile_to'],
+    ['f_keyfile_pass_from', 'f_keyfile_pass_to'],
+    ['f_tz_from', 'f_tz_to'],
+    ['f_bind_from', 'f_bind_to'],
+  ];
+  for (const [a, b] of pairs) {
+    const elA = document.getElementById(a);
+    const elB = document.getElementById(b);
+    const tmp = elA.value;
+    elA.value = elB.value;
+    elB.value = tmp;
+  }
 }
 
 function openModal() {
