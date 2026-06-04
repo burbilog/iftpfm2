@@ -389,6 +389,51 @@ agent-browser screenshot /tmp/test_web_agent_final.png >/dev/null 2>&1 || true
 if [ -f /tmp/test_web_agent_final.png ]; then pass "Screenshot saved"; else fail "Screenshot not created"; fi
 
 # ══════════════════════════════════════════════════════════════════════
+info "=== Test 12: Duplicate entry ==="
+# ══════════════════════════════════════════════════════════════════════
+
+info "Test 12a: Click Duplicate on entry 0"
+runjs "document.querySelectorAll('#tbody tr:first-child button')[1].click()"
+agent-browser wait 500 >/dev/null 2>&1 || true
+
+info "Test 12b: Modal title shows 'New Config (based on #0)'"
+assert_js "document.querySelector('#modalTitle').textContent" "New Config (based on #0)"
+assert_js "document.querySelector('.modal-overlay').classList.contains('active')" "true"
+
+info "Test 12c: Form pre-filled with entry 0 data"
+capture_js "document.getElementById('f_host_from').value"
+HOST_VAL=$(read_result)
+if [ "$HOST_VAL" != "" ]; then pass "host_from pre-filled: '$HOST_VAL'"; else fail "host_from empty"; fi
+
+info "Test 12d: Comment has (copy) suffix"
+capture_js "document.getElementById('f_comment').value"
+COMMENT=$(read_result)
+if echo "$COMMENT" | grep -q "(copy)"; then pass "Comment: '$COMMENT'"; else fail "Expected (copy) in comment, got: '$COMMENT'"; fi
+
+info "Test 12e: Change host and save"
+runjs "document.getElementById('f_host_from').value='duphost.local'; document.getElementById('f_host_from').dispatchEvent(new Event('input',{bubbles:true})); window.saveConfig();"
+agent-browser wait 1500 >/dev/null 2>&1 || true
+
+info "Test 12f: Verify created notification"
+capture_js "document.querySelector('.notification')?.textContent || ''"
+NOTIF=$(read_result)
+if echo "$NOTIF" | grep -q "created"; then pass "Notification: '$NOTIF'"; else fail "Expected 'created', got: '$NOTIF'"; fi
+
+info "Test 12g: Verify 3 entries"
+assert_js "document.querySelectorAll('#tbody tr').length" "3"
+assert_js "document.querySelector('#headerInfo').textContent" "3 config entries loaded"
+
+info "Test 12h: Verify original entry 0 unchanged"
+capture_js "document.querySelector('#tbody tr:first-child td:nth-child(3)').childNodes[0].textContent"
+ORIG_HOST=$(read_result)
+if echo "$ORIG_HOST" | grep -q "99.99.99.99"; then pass "Original entry intact: '$ORIG_HOST'"; else fail "Original entry changed: '$ORIG_HOST'"; fi
+
+info "Test 12i: Verify on disk"
+sleep 0.3
+DISK_COUNT=$(grep -c "^{" "$CONFIG_FILE" 2>/dev/null || echo "0")
+if [ "$DISK_COUNT" = "3" ]; then pass "3 JSONL lines on disk"; else fail "Expected 3 lines, got $DISK_COUNT"; fi
+
+# ══════════════════════════════════════════════════════════════════════
 echo ""
 echo "=================================================="
 if [ "$FAIL_COUNT" -eq 0 ]; then

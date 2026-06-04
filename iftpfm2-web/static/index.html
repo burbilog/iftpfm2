@@ -464,6 +464,7 @@ function render() {
       <td>${commentShort}</td>
       <td class="actions">
         <button class="btn btn-sm btn-secondary" onclick="openEdit(${i})">Edit</button>
+        <button class="btn btn-sm btn-secondary" onclick="openDuplicate(${i})">Duplicate</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDelete(${i})" id="delbtn${i}">Delete</button>
       </td>
     </tr>`;
@@ -488,6 +489,15 @@ function openEdit(i) {
   document.getElementById('modalTitle').textContent = 'Edit Config #' + i;
   const c = configs[i];
   document.getElementById('f_comment').value = c.comment || '';
+  fillForm(c.config);
+  openModal();
+}
+
+function openDuplicate(i) {
+  editIndex = -1;
+  document.getElementById('modalTitle').textContent = 'New Config (based on #' + i + ')';
+  const c = configs[i];
+  document.getElementById('f_comment').value = (c.comment ? c.comment + ' (copy)' : '');
   fillForm(c.config);
   openModal();
 }
