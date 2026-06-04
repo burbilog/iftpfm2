@@ -2,6 +2,51 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.5.0] - 2026-06-04
+
+### Added
+
+- **iftpfm2-web**: New companion binary providing a browser-based UI for editing JSONL configuration files.
+  - Axum-based REST API with full CRUD operations on config entries (`GET`, `POST`, `PUT`, `DELETE /api/configs`).
+  - `POST /api/validate` endpoint for config validation without saving.
+  - Single-page application (vanilla JS, dark theme, no external dependencies) embedded in the binary via `include_str!`.
+  - Real-time regex testing in the edit modal.
+  - Protocol badges (FTP/FTPS/SFTP), search/filter by host/path/comment, password visibility toggles.
+  - Optional Basic Auth via `--user`/`--password` CLI flags or `IFTPFM2_WEB_USER`/`IFTPFM2_WEB_PASSWORD` environment variables.
+  - `--readonly` mode to disable all write operations.
+  - `--listen <addr:port>` flag (default: `127.0.0.1:3000`).
+  - Atomic config writes with in-memory rollback on disk write failure.
+  - `constant_time_eq` for password comparison (timing attack prevention).
+
+- **Library changes** (to support web UI):
+  - `ConfigEntry` type: wrapper preserving comment lines alongside config data.
+  - `parse_config_entries()` / `write_config_entries()`: read and write JSONL with comment preservation.
+  - `validate_for_edit()`: config validation skipping filesystem checks (suitable for web editing).
+  - `Serialize` derived for `Protocol`, `TzOffset`, `Config`.
+  - New types re-exported from `lib.rs`.
+
+- **Makefile**:
+  - `make web` / `make web-debug`: build web UI binary.
+  - `make test-web`: run API tests (34 curl-based tests).
+  - `make test-web-ui`: run UI tests with `agent-browser` (11 tests, graceful skip if not installed).
+  - `make install` now installs both `iftpfm2` and `iftpfm2-web` to `~/.cargo/bin`.
+  - `make test` updated to include web tests.
+
+- **Tests**:
+  - `test_web.sh`: 34 API tests covering auth, CRUD, validation, read-only mode, persistence, SFTP keyfile config, JSONL format.
+  - `test_web_agent.sh`: 11 UI tests covering page load, edit/create/delete, search, protocol fields, regex preview, password toggle, keyboard shortcuts.
+
+- **Documentation**:
+  - README.md: new "Web UI (iftpfm2-web)" section with features, CLI reference, API endpoints, auth, examples.
+  - CLAUDE.md: web crate architecture, build/test commands, integration test descriptions, implementation notes, CLI and API reference.
+  - CLAUDE.md: fixed phantom `-s` flag, corrected socket/PID paths, documented session hash, control connection timeout, error protection constants, `keyfile_pass` fields, missing integration tests.
+
+### Changed
+
+- Workspace configuration in `Cargo.toml` now includes `iftpfm2-web` member.
+
+---
+
 ## [2.4.14] - 2026-05-30
 
 ### Changed
@@ -520,6 +565,7 @@ After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
 
 ## Version Reference
 
+- **2.5.0** - Web UI for JSONL config editing (iftpfm2-web), library extensions for config CRUD
 - **2.4.14** - Full URL with credentials in connect/login/CWD error messages
 - **2.4.13** - Bind address for outgoing connections (bind_from/bind_to) per JSONL config
 - **2.4.12** - Timezone offset support (tz_from/tz_to) for MDTM timestamp correction
