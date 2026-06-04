@@ -1,7 +1,7 @@
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize, Serializer};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Error, ErrorKind};
+use std::io::{BufRead, BufReader, Write, Error, ErrorKind};
 use std::fmt;
 use std::net::IpAddr;
 use secrecy::{Secret, ExposeSecret};
@@ -22,7 +22,7 @@ where
 }
 
 /// FTP/FTPS/SFTP protocol type
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
     /// Standard FTP (unencrypted)
@@ -148,6 +148,15 @@ impl TryFrom<String> for TzOffset {
     }
 }
 
+impl Serialize for TzOffset {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 impl<'de> serde::Deserialize<'de> for TzOffset {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
@@ -156,7 +165,8 @@ impl<'de> serde::Deserialize<'de> for TzOffset {
 }
 
 /// FTP transfer configuration parameters
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Config {
     /// Source FTP server IP/hostname (JSON field: host_from)
     #[serde(rename = "host_from")]
@@ -224,6 +234,56 @@ pub struct Config {
     /// Local IP address to bind for target server connections (JSON field: bind_to, default: none)
     #[serde(rename = "bind_to", default, deserialize_with = "deserialize_optional_ip")]
     pub bind_to: Option<IpAddr>,
+}
+
+impl Serialize for Config {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Use serde_json to build a JSON value, then serialize it
+        // This avoids the complexity of manual serialize_struct with custom serializers
+        let mut map = serde_json::Map::new();
+        map.insert("host_from".into(), serde_json::Value::String(self.ip_address_from.clone()));
+        map.insert("port_from".into(), serde_json::Value::Number(self.port_from.into()));
+        map.insert("login_from".into(), serde_json::Value::String(self.login_from.clone()));
+        if let Some(ref p) = self.password_from {
+            map.insert("password_from".into(), serde_json::Value::String(p.expose_secret().clone()));
+        }
+        if let Some(ref k) = self.keyfile_from {
+            map.insert("keyfile_from".into(), serde_json::Value::String(k.clone()));
+        }
+        if let Some(ref p) = self.keyfile_pass_from {
+            map.insert("keyfile_pass_from".into(), serde_json::Value::String(p.expose_secret().clone()));
+        }
+        map.insert("path_from".into(), serde_json::Value::String(self.path_from.clone()));
+        map.insert("proto_from".into(), serde_json::to_value(&self.proto_from).map_err(serde::ser::Error::custom)?);
+        map.insert("host_to".into(), serde_json::Value::String(self.ip_address_to.clone()));
+        map.insert("port_to".into(), serde_json::Value::Number(self.port_to.into()));
+        map.insert("login_to".into(), serde_json::Value::String(self.login_to.clone()));
+        if let Some(ref p) = self.password_to {
+            map.insert("password_to".into(), serde_json::Value::String(p.expose_secret().clone()));
+        }
+        if let Some(ref k) = self.keyfile_to {
+            map.insert("keyfile_to".into(), serde_json::Value::String(k.clone()));
+        }
+        if let Some(ref p) = self.keyfile_pass_to {
+            map.insert("keyfile_pass_to".into(), serde_json::Value::String(p.expose_secret().clone()));
+        }
+        map.insert("path_to".into(), serde_json::Value::String(self.path_to.clone()));
+        map.insert("proto_to".into(), serde_json::to_value(&self.proto_to).map_err(serde::ser::Error::custom)?);
+        map.insert("age".into(), serde_json::Value::Number(self.age.into()));
+        map.insert("filename_regexp".into(), serde_json::Value::String(self.filename_regexp.clone()));
+        map.insert("tz_from".into(), serde_json::to_value(&self.tz_from).map_err(serde::ser::Error::custom)?);
+        map.insert("tz_to".into(), serde_json::to_value(&self.tz_to).map_err(serde::ser::Error::custom)?);
+        if let Some(ref ip) = self.bind_from {
+            map.insert("bind_from".into(), serde_json::Value::String(ip.to_string()));
+        }
+        if let Some(ref ip) = self.bind_to {
+            map.insert("bind_to".into(), serde_json::Value::String(ip.to_string()));
+        }
+        serde_json::Value::Object(map).serialize(serializer)
+    }
 }
 
 impl Config {
@@ -417,6 +477,94 @@ impl Config {
 
         Ok(())
     }
+
+    /// Validate config for web editing — skips filesystem checks (keyfile existence)
+    pub fn validate_for_edit(&self) -> Result<(), Error> {
+        if self.ip_address_from.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidInput, "host_from cannot be empty"));
+        }
+        if self.ip_address_to.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidInput, "host_to cannot be empty"));
+        }
+        for (host, field_name) in [
+            (&self.ip_address_from, "host_from"),
+            (&self.ip_address_to, "host_to"),
+        ] {
+            if host.contains('/') || host.contains('\\') || host.contains(' ') {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("{} contains invalid characters", field_name),
+                ));
+            }
+        }
+        if self.port_from == 0 {
+            return Err(Error::new(ErrorKind::InvalidInput, "port_from cannot be 0"));
+        }
+        if self.port_to == 0 {
+            return Err(Error::new(ErrorKind::InvalidInput, "port_to cannot be 0"));
+        }
+        if self.login_from.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidInput, "login_from cannot be empty"));
+        }
+        if self.login_to.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidInput, "login_to cannot be empty"));
+        }
+
+        let has_password_from = self.password_from.as_ref().map_or(false, |p| !p.expose_secret().is_empty());
+        let has_keyfile_from = self.keyfile_from.as_ref().map_or(false, |k| !k.is_empty());
+        let has_keyfile_pass_from = self.keyfile_pass_from.as_ref().map_or(false, |p| !p.expose_secret().is_empty());
+
+        if self.proto_from == Protocol::Sftp {
+            if !has_password_from && !has_keyfile_from {
+                return Err(Error::new(ErrorKind::InvalidInput, "from_auth: password_from or keyfile_from is required for SFTP"));
+            }
+            if has_password_from && has_keyfile_from {
+                return Err(Error::new(ErrorKind::InvalidInput, "from_auth: password_from and keyfile_from are mutually exclusive"));
+            }
+            if has_keyfile_pass_from && !has_keyfile_from {
+                return Err(Error::new(ErrorKind::InvalidInput, "from_auth: keyfile_pass_from requires keyfile_from"));
+            }
+            // Note: no filesystem check for keyfile existence in validate_for_edit
+        } else {
+            if !has_password_from {
+                return Err(Error::new(ErrorKind::InvalidInput, "password_from is required for FTP/FTPS"));
+            }
+        }
+
+        let has_password_to = self.password_to.as_ref().map_or(false, |p| !p.expose_secret().is_empty());
+        let has_keyfile_to = self.keyfile_to.as_ref().map_or(false, |k| !k.is_empty());
+        let has_keyfile_pass_to = self.keyfile_pass_to.as_ref().map_or(false, |p| !p.expose_secret().is_empty());
+
+        if self.proto_to == Protocol::Sftp {
+            if !has_password_to && !has_keyfile_to {
+                return Err(Error::new(ErrorKind::InvalidInput, "to_auth: password_to or keyfile_to is required for SFTP"));
+            }
+            if has_password_to && has_keyfile_to {
+                return Err(Error::new(ErrorKind::InvalidInput, "to_auth: password_to and keyfile_to are mutually exclusive"));
+            }
+            if has_keyfile_pass_to && !has_keyfile_to {
+                return Err(Error::new(ErrorKind::InvalidInput, "to_auth: keyfile_pass_to requires keyfile_to"));
+            }
+        } else {
+            if !has_password_to {
+                return Err(Error::new(ErrorKind::InvalidInput, "password_to is required for FTP/FTPS"));
+            }
+        }
+
+        if self.path_from.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidInput, "path_from cannot be empty"));
+        }
+        if self.path_to.is_empty() {
+            return Err(Error::new(ErrorKind::InvalidInput, "path_to cannot be empty"));
+        }
+        if let Err(e) = Regex::new(&self.filename_regexp) {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!("Invalid filename_regexp pattern '{}': {}", self.filename_regexp, e),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Parses configuration file into a vector of Config structs
@@ -484,6 +632,120 @@ pub fn parse_config(filename: &str) -> Result<Vec<Config>, Error> {
     }
 
     Ok(configs)
+}
+
+/// A config entry with its associated comment block
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigEntry {
+    /// Comment text (without # prefixes), lines separated by \n
+    pub comment: String,
+    /// The config itself
+    pub config: Config,
+}
+
+/// Parses configuration file into a vector of ConfigEntry structs (with comments preserved)
+///
+/// Comment lines and empty lines before a JSONL record are captured as the entry's comment.
+/// Trailing comments after the last record are attached to that record.
+pub fn parse_config_entries(filename: &str) -> Result<Vec<ConfigEntry>, Error> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+
+    let mut entries = Vec::new();
+    let mut comment_lines: Vec<String> = Vec::new();
+
+    for (line_num, line) in reader.lines().enumerate() {
+        let line = line?;
+        let trimmed = line.trim();
+
+        if trimmed.is_empty() {
+            // Empty line between blocks — skip (don't add to comment)
+            continue;
+        }
+
+        if trimmed.starts_with('#') {
+            // Comment line — strip "# " or "#" prefix
+            let text = if trimmed.len() > 1 && trimmed.chars().nth(1) == Some(' ') {
+                &trimmed[2..]
+            } else {
+                &trimmed[1..]
+            };
+            comment_lines.push(text.to_string());
+            continue;
+        }
+
+        // JSON line
+        let config: Config = serde_json::from_str(trimmed).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                format!("invalid JSON on line {}: {}", line_num + 1, e),
+            )
+        })?;
+
+        // Validate regex
+        Regex::new(&config.filename_regexp).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                format!("invalid filename regex pattern on line {}: {}", line_num + 1, e),
+            )
+        })?;
+
+        // Validate config values
+        config.validate().map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                format!("invalid config values on line {}: {}", line_num + 1, e),
+            )
+        })?;
+
+        let comment = comment_lines.join("\n");
+        comment_lines.clear();
+
+        entries.push(ConfigEntry { comment, config });
+    }
+
+    // Trailing comments attach to last entry
+    if !comment_lines.is_empty() {
+        if let Some(last) = entries.last_mut() {
+            if !last.comment.is_empty() {
+                last.comment.push('\n');
+            }
+            last.comment.push_str(&comment_lines.join("\n"));
+        }
+    }
+
+    Ok(entries)
+}
+
+/// Writes configuration entries to a JSONL file atomically (temp file → rename)
+///
+/// Format: comment lines with "# " prefix, then JSONL line, then blank line separator
+pub fn write_config_entries(filename: &str, entries: &[ConfigEntry]) -> Result<(), Error> {
+    let temp_filename = format!("{}.tmp", filename);
+    let mut file = File::create(&temp_filename)?;
+
+    for (i, entry) in entries.iter().enumerate() {
+        // Add blank line separator between entries (not before first)
+        if i > 0 {
+            writeln!(file)?;
+        }
+
+        // Write comment lines
+        if !entry.comment.is_empty() {
+            for line in entry.comment.split('\n') {
+                writeln!(file, "# {}", line)?;
+            }
+        }
+
+        // Write JSONL line
+        let json = serde_json::to_string(&entry.config)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, format!("serialize error: {}", e)))?;
+        writeln!(file, "{}", json)?;
+    }
+
+    file.flush()?;
+    std::fs::rename(&temp_filename, filename)?;
+    Ok(())
 }
 
 #[cfg(test)]
