@@ -274,6 +274,105 @@ Multi-homed server with bind addresses (source and target on different network i
 {"host_from":"10.0.1.100","port_from":21,"login_from":"user1","password_from":"pass1","path_from":"/outgoing","bind_from":"192.168.1.10","host_to":"10.0.2.200","port_to":21,"login_to":"user2","password_to":"pass2","path_to":"/incoming","bind_to":"192.168.2.10","age":3600,"filename_regexp":".*\\.csv$"}
 ```
 
+Web UI (iftpfm2-web)
+=====================
+
+`iftpfm2-web` is a companion web application that provides a browser-based UI for editing JSONL configuration files used by iftpfm2. It is built as a separate binary in the same workspace.
+
+### Features
+
+- **Single-page application** with dark theme UI (no external JS dependencies)
+- **Full CRUD** — create, view, edit, and delete config entries
+- **Real-time regex testing** — test filename patterns directly in the edit modal
+- **Protocol badges** — visual indicators for FTP/FTPS/SFTP protocols
+- **Password visibility toggles** — show/hide sensitive fields
+- **Search/filter** — filter configs by host, path, or comment
+- **Keyboard shortcuts** — Escape closes modals
+- **Read-only mode** — disable write operations for production viewing
+
+### Building
+
+~~~
+make web            # Release build
+make web-debug      # Debug build
+~~~
+
+Or manually:
+
+~~~
+cargo build --release --bin iftpfm2-web --package iftpfm2-web
+~~~
+
+### Running
+
+~~~
+iftpfm2-web --config /path/to/config.jsonl [options]
+~~~
+
+Options:
+
+| Flag | Argument | Description | Default |
+|------|----------|-------------|---------|
+| `--config` | `<path>` | Path to JSONL config file (required) | — |
+| `--listen` | `<addr:port>` | Listen address and port | `127.0.0.1:3000` |
+| `--readonly` | — | Read-only mode (disables write operations) | off |
+| `--user` | `<login>` | Basic Auth username (env: `IFTPFM2_WEB_USER`) | — |
+| `--password` | `<pass>` | Basic Auth password (env: `IFTPFM2_WEB_PASSWORD`) | — |
+
+### Authentication
+
+Basic Auth is optional but recommended. Credentials can be set via CLI flags or environment variables (`IFTPFM2_WEB_USER` / `IFTPFM2_WEB_PASSWORD`, or `IFTPM2_WEB_USER` / `IFTPM2_WEB_PASSWORD`). When no auth is configured, the server logs a warning.
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Serve SPA frontend |
+| GET | `/api/configs` | List all config entries |
+| GET | `/api/configs/{index}` | Get specific config by index |
+| POST | `/api/configs` | Create new config entry |
+| PUT | `/api/configs/{index}` | Update config entry |
+| DELETE | `/api/configs/{index}` | Delete config entry |
+| POST | `/api/validate` | Validate config without saving |
+
+All endpoints require Basic Auth when authentication is configured. Write endpoints (POST, PUT, DELETE) are blocked in read-only mode.
+
+### Config Entry Format
+
+Each API response wraps a config entry with its index:
+
+```json
+{
+  "index": 0,
+  "comment": "# some comment",
+  "config": { "host_from": "...", "host_to": "...", ... }
+}
+```
+
+Comment lines (starting with `#`) in the JSONL file are preserved. Lines are 0-indexed.
+
+### Examples
+
+Start with authentication on a custom port:
+
+~~~
+iftpfm2-web --config /etc/iftpfm2/prod.jsonl --listen 0.0.0.0:8080 --user admin --password secret
+~~~
+
+Read-only mode for monitoring:
+
+~~~
+iftpfm2-web --config /etc/iftpfm2/prod.jsonl --readonly
+~~~
+
+Using environment variables:
+
+~~~
+export IFTPFM2_WEB_USER=admin
+export IFTPFM2_WEB_PASSWORD=secret
+iftpfm2-web --config config.jsonl
+~~~
+
 Testing
 ======
 
@@ -297,6 +396,8 @@ This runs:
 - Bind address test (`test_bind.sh`)
 - SFTP password auth test (`test_sftp_docker.sh`, auto-detected if Docker available)
 - SFTP SSH key auth test (`test_sftp_keys_docker.sh`, auto-detected if Docker available)
+- Web API tests (`test_web.sh`, 34 curl-based tests)
+- Web UI tests (`test_web_agent.sh`, if `agent-browser` is available)
 
 To run SFTP tests separately (requires Docker):
 
@@ -305,12 +406,12 @@ make test-sftp        # Password authentication
 make test-sftp-keys   # SSH key authentication
 ~~~
 
-These tests are also auto-detected and run by `make test` when Docker is available. They run:
-- Password authentication test
-- SSH key authentication (no passphrase)
-- SSH key authentication with passphrase
-- Delete flag test
-- Regex filtering test
+To run web tests separately:
+
+~~~
+make test-web         # API tests (curl-based, 34 tests)
+make test-web-ui      # UI tests (agent-browser, skip if not installed)
+~~~
 
 Individual tests can be run directly:
 
@@ -318,6 +419,7 @@ Individual tests can be run directly:
 ./test.sh           # Basic FTP transfer
 ./test_temp_dir.sh  # Temp directory with -T and --debug flags
 ./test_pid.sh       # PID file creation and signaling (no lsof dependency)
+./test_web.sh       # Web API tests
 ~~~
 
 Author
