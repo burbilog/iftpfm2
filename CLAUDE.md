@@ -21,7 +21,7 @@ make install
 # Run all tests (unit + integration)
 make test
 # or manually:
-cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_sftp_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh && ./test_pid.sh && ./test_ram_threshold.sh
+cargo test && ./test.sh && ./test_age.sh && ./test_conn_timeout.sh && ./test_sftp_timeout.sh && ./test_ftps.sh && ./test_temp_dir.sh && ./test_pid.sh && ./test_pid_no_xdg.sh && ./test_ram_threshold.sh && ./test_bind.sh
 
 # Run only unit tests
 cargo test --lib
@@ -75,6 +75,11 @@ cargo doc --open
   - Prerequisites: Docker with `atmoz/sftp` container
   - Starts two SFTP servers on ports 3222/3223
   - Tests password authentication, delete flag, and regex filtering
+- `test_pid_no_xdg.sh` - PID handling test without XDG_RUNTIME_DIR (in `make test`)
+  - Unsets XDG_RUNTIME_DIR, verifies fallback to `/tmp/iftpfm2_<uid>.sock`
+- `test_sftp_keys_docker.sh` - SFTP SSH key authentication test (in `make test` when Docker available)
+  - Prerequisites: Docker with `atmoz/sftp` container
+  - Tests key auth with and without passphrase
 
 ## Project Architecture
 
@@ -104,12 +109,15 @@ cargo doc --open
 ### Key Architectural Patterns
 
 **Single Instance Enforcement:**
-1. New instance checks for `/tmp/iftpfm2.sock`
-2. If exists: sends SIGTERM to old PID, waits grace period, forces SIGKILL if needed
-3. Removes stale socket and creates new one
-4. Spawns listener thread to watch for "SHUTDOWN" commands from new instances
-5. Creates `/tmp/iftpfm2.pid` with current PID
-6. Uses `scopeguard` to ensure cleanup on exit
+1. Paths are user-isolated via `get_lock_paths()` in `instance.rs`:
+   - With `$XDG_RUNTIME_DIR`: `$XDG_RUNTIME_DIR/iftpfm2.sock` / `iftpfm2.pid`
+   - Without `$XDG_RUNTIME_DIR`: `/tmp/iftpfm2_<uid>.sock` / `iftpfm2_<uid>.pid`
+2. New instance checks for socket file
+3. If exists: sends SIGTERM to old PID, waits grace period, forces SIGKILL if needed
+4. Removes stale socket and creates new one
+5. Spawns listener thread to watch for "SHUTDOWN" commands from new instances
+6. Creates PID file with current PID
+7. Uses `scopeguard` to ensure cleanup on exit
 
 **Graceful Shutdown:**
 - Signal handler (SIGINT/SIGTERM) only sets atomic flags (async-signal-safe)
@@ -125,6 +133,10 @@ cargo doc --open
 - `set_debug_mode()` - enable/disable debug logging
 - Handles mutex poisoning gracefully
 - In non-test code, logging failures never panic (uses `let _ =`)
+- **Session hash** (`logging.rs`): 4-character hex hash (`generate_session_hash()`) stored in thread-local `SESSION_CONTEXT`
+  - Set via `set_session_context(thread_id, hash)` at start of `transfer_files()`
+  - Cleared via `clear_session_context()` on exit (uses scopeguard)
+  - Log format with context: `[timestamp] [Tn] [hash] message`
 
 **FTP Transfer Flow (per config entry):**
 1. Connect to source FTP/FTPS/SFTP (using `Client::connect()` with protocol from `proto_from`)
@@ -152,6 +164,10 @@ cargo doc --open
 8. Call `quit()` on both connections
 9. Log summary
 
+**Error Protection (ftp_ops.rs):**
+- `MAX_CONSECUTIVE_ERRORS: u32 = 5` — session aborts after 5 consecutive transfer errors
+- `MAX_RECONNECT_ATTEMPTS: u32 = 3` — reconnect attempts per file on `DataConnectionAlreadyOpen` error
+
 **FTPS Support:**
 - Protocol selected via `proto_from`/`proto_to` config fields (`ftp` or `ftps`)
 - `Client::connect()` creates either `FtpClient` or `FtpsClient` based on protocol
@@ -178,6 +194,7 @@ cargo doc --open
 - `tz_from` and `tz_to` default to `TzOffset::Utc` if not specified (backward compatible)
 - `bind_from` and `bind_to` default to `None` if not specified (OS chooses source address)
 - `bind_from`/`bind_to` validated as `IpAddr` during serde deserialization (invalid IP → parse error with line number)
+- `keyfile_pass_from`/`keyfile_pass_to`: passphrase for SSH private keys (optional, only used with `keyfile_from`/`keyfile_to`)
 - For SFTP: either password OR keyfile must be specified (validated in config parsing)
 - Regex pattern validated once during parsing (not re-validated during transfer)
 
@@ -220,7 +237,7 @@ cargo doc --open
 - `test_pid.sh` - Tests PID file creation and nix-based signaling
 - SFTP tests: `make test-sftp` (separate target, uses Docker atmoz/sftp container)
 - **Run all tests (unit + integration):** `make test` in the project root directory
-  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_sftp_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, `./test_pid.sh`, `./test_ram_threshold.sh`, and `./test_bind.sh`
+  - This runs `cargo test`, `./test.sh`, `./test_age.sh`, `./test_conn_timeout.sh`, `./test_sftp_timeout.sh`, `./test_ftps.sh`, `./test_temp_dir.sh`, `./test_pid.sh`, `./test_pid_no_xdg.sh`, `./test_ram_threshold.sh`, and `./test_bind.sh`, plus Docker tests (`test_sftp_docker.sh`, `test_sftp_keys_docker.sh`) if Docker is available
   - Rule: NEVER run make test directly. Only through the Task tool with a sub-agent.
 
 **Connection Timeout:**
@@ -228,6 +245,7 @@ cargo doc --open
 - Passed to `connect_server()` as `Duration`
 - Applied via `connect_timeout()` methods for FTP/FTPS, and stream timeouts for SFTP
 - Error messages include the timeout value for debugging
+- Control connection read/write timeout: 60 seconds (`DEFAULT_RW_TIMEOUT` in `ftp.rs`/`ftps.rs`). Applies to all read/write ops on the FTP/FTPS control connection. Distinct from connect timeout (`-t`).
 
 **Upload Verification (Mandatory):**
 - ALWAYS uses FTP `SIZE` command to verify file size on target server after upload
@@ -260,7 +278,6 @@ cargo doc --open
 | `-v` | - | Show version information |
 | `-d` | - | Delete source files after successful transfer |
 | `-l` | `<logfile>` | Write logs to specified file |
-| `-s` | - | Write logs to stdout (mutually exclusive with `-l`) |
 | `-p` | `<number>` | Number of parallel transfers (default: 1) |
 | `-r` | - | Randomize file processing order |
 | `-g` | `<seconds>` | Grace period before SIGKILL (default: 30) |

@@ -183,7 +183,9 @@ Single Instance Behavior:
   1. Attempt to gracefully terminate any running instance (SIGTERM)
   2. Wait up to configured grace period (default: 30 seconds) for graceful shutdown
   3. Forcefully terminate if needed (SIGKILL)
-- Uses a Unix domain socket (/tmp/iftpfm2.sock) and PID file (/tmp/iftpfm2.pid)
+- Uses a Unix domain socket and PID file (paths are user-isolated):
+  - With `$XDG_RUNTIME_DIR`: `$XDG_RUNTIME_DIR/iftpfm2.sock` and `iftpfm2.pid`
+  - Without `$XDG_RUNTIME_DIR`: `/tmp/iftpfm2_<uid>.sock` and `iftpfm2_<uid>.pid`
 - Automatically removes lock files on exit
 
 Graceful Shutdown:
@@ -290,16 +292,20 @@ This runs:
 - FTPS with self-signed certificates test (`test_ftps.sh`)
 - Temp directory test (`test_temp_dir.sh`)
 - PID handling test (`test_pid.sh`)
+- PID handling test without XDG_RUNTIME_DIR (`test_pid_no_xdg.sh`)
 - RAM threshold test (`test_ram_threshold.sh`)
 - Bind address test (`test_bind.sh`)
+- SFTP password auth test (`test_sftp_docker.sh`, auto-detected if Docker available)
+- SFTP SSH key auth test (`test_sftp_keys_docker.sh`, auto-detected if Docker available)
 
-To run SFTP tests (requires Docker):
+To run SFTP tests separately (requires Docker):
 
 ~~~
-make test-sftp
+make test-sftp        # Password authentication
+make test-sftp-keys   # SSH key authentication
 ~~~
 
-This runs:
+These tests are also auto-detected and run by `make test` when Docker is available. They run:
 - Password authentication test
 - SSH key authentication (no passphrase)
 - SSH key authentication with passphrase
