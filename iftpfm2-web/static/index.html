@@ -58,12 +58,12 @@ header .info { color: var(--text-dim); font-size: 13px; }
 .btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
 .btn-danger:hover { background: var(--error); color: #fff; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
-main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+main { max-width: 100%; margin: 0 auto; padding: 24px; }
 .table-wrap {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow-x: auto;
 }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -80,7 +80,7 @@ tr:hover td { background: rgba(255,255,255,0.03); }
 .proto-ftp { background: #2196f3; color: #fff; }
 .proto-ftps { background: var(--success); color: #000; }
 .proto-sftp { background: var(--accent2); color: #fff; }
-.actions { display: flex; gap: 6px; }
+.actions { display: flex; gap: 6px; white-space: nowrap; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .search {
   background: var(--surface);
