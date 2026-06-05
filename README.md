@@ -5,7 +5,7 @@ iftpfm2
 
 As of January 2023, I had no prior Rust experience before creating this tool. The program was developed primarily with ChatGPT's assistance, which implemented the necessary features by following my plain English instructions. Despite being my first Rust project, the process went remarkably smoothly thanks to ChatGPT handling the heavy lifting and answering numerous basic questions.
 
-Later improvements and refinements in May 2025 were made with help from Sonnet and DeepSeek, which helped polish the documentation and fix subtle code issues.
+Later improvements and refinements in May 2025 were made with help from Sonnet and DeepSeek, which helped polish the documentation and fix subtle code issues. Starting from 2026, all changes are made with GLM models, currently GLM-5.1.
 
 Installation
 ============

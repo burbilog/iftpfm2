@@ -1,20 +1,20 @@
-# This is a sample config file for iftpfm2
-#
+# This is a sample config file for  iftpfm2
+# 
 # Each line represents a single transfer configuration in JSONL format
 # Lines starting with '#' are comments and are ignored
 # The config file is a JSONL (JSON Lines) format - one JSON object per line
 # Available fields:
-# host_from: the IP address/hostname of the FTP server to transfer files from
-# port_from: the port of the FTP server to transfer files from
-# login_from: the login to use to connect to the FTP server to transfer files from
-# password_from: the password to use to connect to the FTP server to transfer files from
-# path_from: the path on the FTP server to transfer files from
+# host_from: the IP address/hostname of the server to transfer files from
+# port_from: the port of the server to transfer files from
+# login_from: the login to use to connect to the server to transfer files from
+# password_from: the password to use to connect to the server to transfer files from (optional for SFTP when using keyfile_from)
+# path_from: the path on the server to transfer files from
 # proto_from: source protocol - "ftp" (default), "ftps", or "sftp"
-# host_to: the IP address/hostname of the FTP server to transfer files to
-# port_to: the port of the FTP server to transfer files to
-# login_to: the login to use to connect to the FTP server to transfer files to
-# password_to: the password to use to connect to the FTP server to transfer files to
-# path_to: the path on the FTP server to transfer files to
+# host_to: the IP address/hostname of the server to transfer files to
+# port_to: the port of the server to transfer files to
+# login_to: the login to use to connect to the server to transfer files to
+# password_to: the password to use to connect to the server to transfer files to (optional for SFTP when using keyfile_to)
+# path_to: the path on the server to transfer files to
 # proto_to: target protocol - "ftp" (default), "ftps", or "sftp"
 # age: the age in seconds of the files to transfer, files younger than age seconds are ignored
 # filename_regexp: regular expression pattern to match files in specified source path (string)
@@ -26,17 +26,16 @@
 # keyfile_pass_to: passphrase for SSH private key (optional, only used with keyfile_to)
 # bind_from: local IP address to bind for source server connections (optional, default: OS chooses automatically)
 # bind_to: local IP address to bind for target server connections (optional, default: OS chooses automatically)
-
 # This is a config line to transfer all files older than 1 day from 192.168.0.1 to 192.168.0.2
-{"host_from":"192.168.0.1","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/path/to/source/dir/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/path/to/target/dir","age":86400,"filename_regexp":".*"}
+{"age":86400,"filename_regexp":".*","host_from":"192.168.0.1","host_to":"192.168.0.2","login_from":"user1","login_to":"user2","password_from":"password1","password_to":"password2","path_from":"/path/to/source/dir/","path_to":"/path/to/target/dir","port_from":21,"port_to":21,"proto_from":"ftp","proto_to":"ftp","tz_from":"utc","tz_to":"utc"}
 
 # This is a config line to transfer all .txt files older than 1 week from 192.168.0.3 to 192.168.0.4
-{"host_from":"192.168.0.3","port_from":21,"login_from":"user3","password_from":"password3","path_from":"/path/to/source/dir/","host_to":"192.168.0.4","port_to":21,"login_to":"user4","password_to":"password4","path_to":"/path/to/target/dir","age":604800,"filename_regexp":".*\\.txt$"}
+{"age":604800,"filename_regexp":".*\\.txt$","host_from":"192.168.0.3","host_to":"192.168.0.4","login_from":"user3","login_to":"user4","password_from":"password3","password_to":"password4","path_from":"/path/to/source/dir/","path_to":"/path/to/target/dir","port_from":21,"port_to":21,"proto_from":"ftp","proto_to":"ftp","tz_from":"utc","tz_to":"utc"}
 
 # This is a config line to transfer .csv files via FTPS (with TLS encryption)
 # Use --insecure-skip-verify flag for self-signed certificates
-{"host_from":"ftps.example.com","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/outgoing/","proto_from":"ftps","host_to":"ftps.example.com","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/incoming/","proto_to":"ftps","age":86400,"filename_regexp":".*\\.csv$"}
+{"age":86400,"filename_regexp":".*\\.csv$","host_from":"ftps.example.com","host_to":"ftps.example.com","login_from":"user1","login_to":"user2","password_from":"password1","password_to":"password2","path_from":"/outgoing/","path_to":"/incoming/","port_from":21,"port_to":21,"proto_from":"ftps","proto_to":"ftps","tz_from":"utc","tz_to":"utc"}
 
 # This is a config line with timezone offset for a server in Moscow (UTC+3)
 # The source server returns local time in MDTM, so tz_from corrects it to UTC
-{"host_from":"ftp.moscow.local","port_from":21,"login_from":"user1","password_from":"password1","path_from":"/data/","host_to":"192.168.0.2","port_to":21,"login_to":"user2","password_to":"password2","path_to":"/backup/","age":3600,"filename_regexp":".*","tz_from":"+03:00"}
+{"age":3600,"filename_regexp":".*","host_from":"ftp.moscow.local","host_to":"192.168.0.2","login_from":"user1","login_to":"user2","password_from":"password1","password_to":"password2","path_from":"/data/","path_to":"/backup/","port_from":21,"port_to":21,"proto_from":"ftp","proto_to":"ftp","tz_from":"+03:00","tz_to":"utc"}
