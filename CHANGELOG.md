@@ -2,6 +2,32 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.5.3] - 2026-06-05
+
+### Added
+
+- **iftpfm2-web**: Log Viewer tab — view iftpfm2 log files directly in the browser
+  - New `--logfile <path>` CLI flag enables a second tab alongside Config Editor
+  - Server-side tail reading: `GET /api/logs?tail=N` returns last N lines efficiently via `seek(SeekFrom::End)` — handles 200MB+ logs without loading entire file into memory
+  - Server-side search: `GET /api/logs?search=Q&limit=N` uses BufReader with VecDeque sliding window — O(limit) memory, returns last N matches with `total_matches` count
+  - `GET /api/logs/stats` endpoint returns file metadata (exists, size, path)
+  - Monospace log display with ERROR (red) and WARNING (yellow) line highlighting
+  - Search, Load more (+500 lines), and Refresh controls
+  - Tab navigation: Config Editor / Log Viewer with lazy load on first visit
+
+### Changed
+
+- **iftpfm2-web**: TZ Offset input fields now show help tooltips with supported format examples (`utc`, `+03:00`, `-05:30`, `+0300`, `+3`)
+- **sample.jsonl**: Fixed comments — "FTP server" → "server", noted password optionality for SFTP keyfile auth
+- **README.md**: Added GLM-5.1 credit for 2026+ changes
+
+### Tested
+
+- `test_web.sh`: 8 new tests for Log Viewer API (stats, tail, search, edge cases) — total 42 tests
+- All 70 unit tests pass, all integration tests pass, all web tests pass (42 API + 13 UI)
+
+---
+
 ## [2.5.2] - 2026-06-05
 
 ### Fixed
@@ -583,6 +609,8 @@ After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
 
 ## Version Reference
 
+- **2.5.3** - Log Viewer tab in iftpfm2-web with server-side tail/search, TZ Offset help tooltips
+- **2.5.2** - Chromium table truncation fix for iftpfm2-web
 - **2.5.1** - Duplicate and Swap buttons for iftpfm2-web config editor, UI tests for new features
 - **2.5.0** - Web UI for JSONL config editing (iftpfm2-web), library extensions for config CRUD
 - **2.4.14** - Full URL with credentials in connect/login/CWD error messages

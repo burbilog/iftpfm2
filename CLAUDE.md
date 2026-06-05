@@ -37,7 +37,7 @@ make web              # Release
 make web-debug        # Debug
 
 # Run web tests
-make test-web         # API tests (34 curl-based tests)
+make test-web         # API tests (42 curl-based tests)
 make test-web-ui      # UI tests (agent-browser)
 
 # Generate documentation
@@ -299,6 +299,12 @@ cargo doc --open
 - Config modifications are atomic: validation → memory update → disk write; rollback on write failure
 - Build: `make web` (release), `make web-debug` (debug), or `cargo build --bin iftpfm2-web --package iftpfm2-web`
 - Tests: `make test-web` (API), `make test-web-ui` (UI with agent-browser)
+- Log Viewer: `--logfile <path>` enables a second tab for viewing iftpfm2 log files
+  - Reads from end of file (O(chunk), not O(file_size)) — handles 200MB+ logs
+  - `GET /api/logs/stats` — file metadata (exists, size, path)
+  - `GET /api/logs?tail=N` — last N lines (default 1000)
+  - `GET /api/logs?search=Q&limit=N` — search with sliding window (VecDeque), returns last N matches + total_matches count
+  - Frontend: monospace `<pre>` display, ERROR/WARNING highlighting, search, load more, refresh
 - Install: `make install` installs both `iftpfm2` and `iftpfm2-web` to `~/.cargo/bin`
 
 ## Common Issues to Avoid
@@ -353,6 +359,7 @@ cargo doc --open
 | `--readonly` | — | Read-only mode (blocks write operations) |
 | `--user` | `<login>` | Basic Auth username (env: `IFTPFM2_WEB_USER` or `IFTPM2_WEB_USER`) |
 | `--password` | `<pass>` | Basic Auth password (env: `IFTPFM2_WEB_PASSWORD` or `IFTPM2_WEB_PASSWORD`) |
+| `--logfile` | `<path>` | Path to iftpfm2 log file (enables Log Viewer tab) |
 
 **Web API Endpoints:**
 
@@ -365,10 +372,13 @@ cargo doc --open
 | PUT | `/api/configs/{index}` | Update config entry |
 | DELETE | `/api/configs/{index}` | Delete config entry |
 | POST | `/api/validate` | Validate config without saving |
+| GET | `/api/logs/stats` | Log file metadata (size, exists, path) |
+| GET | `/api/logs?tail=N` | Last N log lines (default 1000) |
+| GET | `/api/logs?search=Q&limit=N` | Search log for substring Q, return last N matches |
 
 **Web UI Implementation Notes:**
 - SPA is vanilla JavaScript, no framework — embedded in binary via `include_str!("../static/index.html")`
-- State held in `AppState`: `config_path`, `readonly`, `auth_user`, `auth_password`, `entries: Mutex<Vec<ConfigEntry>>`
+- State held in `AppState`: `config_path`, `readonly`, `auth_user`, `auth_password`, `log_file: Option<String>`, `entries: Mutex<Vec<ConfigEntry>>`
 - Config modifications are atomic: validate → update memory → write disk; rollback in-memory on disk write failure
 - CORS enabled permissive (`CorsLayer::permissive()`) for development
 - Password comparison uses `constant_time_eq` to prevent timing attacks
