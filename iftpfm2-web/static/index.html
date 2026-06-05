@@ -220,16 +220,61 @@ tr:hover td { background: rgba(255,255,255,0.03); }
   margin-left: 4px;
   vertical-align: middle;
 }
+/* Tabs */
+.tabs { display: flex; gap: 0; }
+.tab {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+/* Log Viewer */
+.log-viewer {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  position: relative;
+}
+.log-content {
+  padding: 16px;
+  margin: 0;
+  font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-line-error { color: var(--error); }
+.log-line-warning { color: var(--warning); }
+.log-line-info { color: var(--text-dim); }
+.log-line-success { color: var(--success); }
+.log-info { color: var(--text-dim); font-size: 13px; }
+.log-empty { text-align: center; padding: 40px; color: var(--text-dim); }
 </style>
 </head>
 <body>
 
 <header>
-  <h1><span>iftpfm2</span> Config Editor</h1>
+  <div style="display:flex;align-items:center;gap:24px">
+    <h1><span>iftpfm2</span></h1>
+    <nav class="tabs">
+      <button class="tab active" data-tab="config" onclick="switchTab('config')">Config Editor</button>
+      <button class="tab" data-tab="logs" onclick="switchTab('logs')">Log Viewer</button>
+    </nav>
+  </div>
   <div class="info" id="headerInfo">Loading...</div>
 </header>
 
-<main>
+<main id="configSection">
   <div class="toolbar">
     <div style="display:flex;gap:12px;align-items:center">
       <input type="text" class="search" id="search" placeholder="Search by host, path, comment...">
@@ -257,6 +302,25 @@ tr:hover td { background: rgba(255,255,255,0.03); }
   </div>
   <div class="loading" id="loading" style="display:none">Loading...</div>
 </main>
+
+<section id="logSection" style="display:none">
+  <div class="toolbar">
+    <div style="display:flex;gap:12px;align-items:center">
+      <input type="text" class="search" id="logSearch" placeholder="Search in log..." onkeydown="if(event.key==='Enter')searchLogs()">
+      <button class="btn btn-primary" id="logSearchBtn" onclick="searchLogs()">Search</button>
+      <button class="btn btn-secondary" id="logClearBtn" onclick="clearSearch()" style="display:none">Clear</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="logInfo" class="log-info"></span>
+      <button class="btn btn-secondary" onclick="loadMoreLogs()">Load more</button>
+      <button class="btn btn-secondary" onclick="loadLogs()">Refresh</button>
+    </div>
+  </div>
+  <div class="log-viewer">
+    <pre id="logContent" class="log-content"><span class="log-empty">Click Refresh to load log entries</span></pre>
+    <div class="loading" id="logLoading" style="display:none">Loading log...</div>
+  </div>
+</section>
 
 <!-- Edit/Create Modal -->
 <div class="modal-overlay" id="modal">
@@ -736,6 +800,115 @@ function togglePw(id) {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
 });
+
+// ── Tab switching ─────────────────────────────────────────────────────
+
+let currentTab = 'config';
+
+function switchTab(tab) {
+  currentTab = tab;
+  const configSection = document.getElementById('configSection');
+  const logSection = document.getElementById('logSection');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+
+  if (tab === 'config') {
+    configSection.style.display = '';
+    logSection.style.display = 'none';
+  } else {
+    configSection.style.display = 'none';
+    logSection.style.display = '';
+    if (!logLoaded) loadLogs();
+  }
+}
+
+// ── Log Viewer ───────────────────────────────────────────────────────
+
+let logLoaded = false;
+let logTail = 500;
+let logSearchQuery = '';
+
+async function loadLogs() {
+  const loading = document.getElementById('logLoading');
+  loading.style.display = '';
+  try {
+    const res = await api('/api/logs?tail=' + logTail);
+    const data = await res.json();
+    if (data.error) { notify(data.error, 'error'); return; }
+    logSearchQuery = '';
+    document.getElementById('logSearch').value = '';
+    document.getElementById('logClearBtn').style.display = 'none';
+    renderLogs(data);
+    logLoaded = true;
+  } catch(e) {
+    notify('Failed to load log: ' + e.message, 'error');
+  }
+  loading.style.display = 'none';
+}
+
+async function searchLogs() {
+  const query = document.getElementById('logSearch').value.trim();
+  if (!query) { loadLogs(); return; }
+  const loading = document.getElementById('logLoading');
+  loading.style.display = '';
+  try {
+    const res = await api('/api/logs?search=' + encodeURIComponent(query) + '&limit=' + logTail);
+    const data = await res.json();
+    if (data.error) { notify(data.error, 'error'); return; }
+    logSearchQuery = query;
+    document.getElementById('logClearBtn').style.display = '';
+    renderLogs(data);
+  } catch(e) {
+    notify('Search failed: ' + e.message, 'error');
+  }
+  loading.style.display = 'none';
+}
+
+function clearSearch() {
+  document.getElementById('logSearch').value = '';
+  document.getElementById('logClearBtn').style.display = 'none';
+  loadLogs();
+}
+
+function loadMoreLogs() {
+  logTail += 500;
+  if (logSearchQuery) { searchLogs(); } else { loadLogs(); }
+}
+
+function renderLogs(data) {
+  const content = document.getElementById('logContent');
+  const info = document.getElementById('logInfo');
+  const lines = data.lines || [];
+
+  if (lines.length === 0) {
+    content.innerHTML = '<span class="log-empty">No log entries found</span>';
+    info.textContent = '';
+    return;
+  }
+
+  let html = '';
+  for (const line of lines) {
+    let cls = '';
+    if (/\bERROR\b/.test(line)) cls = 'log-line-error';
+    else if (/\bWARNING\b/.test(line) || /\bWARN\b/.test(line)) cls = 'log-line-warning';
+    else if (/\bStarting\b|\bLoaded\b|\bcomplete\b/i.test(line)) cls = 'log-line-success';
+    html += '<span' + (cls ? ' class="' + cls + '"' : '') + '>' + escapeHtml(line) + '</span>\n';
+  }
+  content.innerHTML = html;
+
+  // Info line
+  const fs = data.file_size || 0;
+  const sizeStr = fs > 1048576 ? (fs / 1048576).toFixed(1) + ' MB'
+    : fs > 1024 ? (fs / 1024).toFixed(1) + ' KB'
+    : fs + ' B';
+  let txt = lines.length + ' lines | ' + sizeStr;
+  if (data.total_matches != null) txt += ' | ' + data.total_matches + ' total matches';
+  info.textContent = txt;
+
+  // Auto-scroll to bottom
+  const viewer = content.parentElement;
+  viewer.scrollTop = viewer.scrollHeight;
+}
 
 // Search filter
 document.getElementById('search').addEventListener('input', render);

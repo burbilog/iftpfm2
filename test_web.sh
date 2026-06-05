@@ -19,6 +19,7 @@ BASE_URL="http://127.0.0.1:13579"
 AUTH_USER="testadmin"
 AUTH_PASS="testsecret123"
 CONFIG_FILE="/tmp/test_web_config.jsonl"
+LOG_FILE="/tmp/iftpfm2_test_web.log"
 WEB_PID=""
 RO_PID=""
 
@@ -37,7 +38,7 @@ FAIL_COUNT=0
 cleanup() {
     if [ -n "$WEB_PID" ]; then kill $WEB_PID 2>/dev/null || true; fi
     if [ -n "$RO_PID" ]; then kill $RO_PID 2>/dev/null || true; fi
-    rm -f "$CONFIG_FILE" "${CONFIG_FILE}.tmp" 2>/dev/null || true
+    rm -f "$CONFIG_FILE" "${CONFIG_FILE}.tmp" "$LOG_FILE" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -82,6 +83,29 @@ cat > "$CONFIG_FILE" << 'TESTEOF'
 {"host_from":"10.0.0.3","port_from":22,"login_from":"user3","password_from":"pass3","path_from":"/src2/","host_to":"10.0.0.4","port_to":22,"login_to":"user4","password_to":"pass4","path_to":"/dst2/","age":7200,"filename_regexp":".*"}
 TESTEOF
 
+# ── Create test log file ──────────────────────────────────────────────
+info "Creating test log file..."
+cat > "$LOG_FILE" << 'LOGEOF'
+[2024-01-15 10:00:00] Starting iftpfm2 v2.5.0
+[2024-01-15 10:00:01] Loading config from /etc/iftpfm2/config.jsonl
+[2024-01-15 10:00:01] Loaded 3 config entries
+[2024-01-15 10:00:02] [T1] Connecting to 10.0.0.1:21...
+[2024-01-15 10:00:02] [T1] Login successful
+[2024-01-15 10:00:03] [T1] ERROR: Connection timed out to 10.0.0.2:21
+[2024-01-15 10:00:04] [T2] WARNING: File age check skipped for entry 2
+[2024-01-15 10:00:05] [T1] Transfer complete: data.xml (1024 bytes)
+[2024-01-15 10:00:06] [T1] Transfer complete: report.csv (2048 bytes)
+[2024-01-15 10:00:07] [T2] ERROR: Authentication failed for user@10.0.0.3
+[2024-01-15 10:00:08] [T1] Upload verification passed: data.xml
+[2024-01-15 10:00:09] [T2] WARNING: File 'old_data.xml' skipped (age filter)
+[2024-01-15 10:00:10] [T1] Deleting source file: data.xml
+[2024-01-15 10:00:11] Session complete: 2 transferred, 1 errors
+[2024-01-15 10:00:12] [T1] [a1b2] New session started
+[2024-01-15 10:00:13] [T1] [a1b2] ERROR: Disk full on target server
+[2024-01-15 10:00:14] [T2] [c3d4] WARNING: Slow connection detected
+[2024-01-15 10:00:15] [T2] [c3d4] Transfer complete: backup.tar.gz (52428800 bytes)
+LOGEOF
+
 # ── Kill stale servers on test ports ──────────────────────────────────
 if command -v fuser &>/dev/null; then
     fuser -k 13579/tcp 13580/tcp 2>/dev/null || true
@@ -93,7 +117,7 @@ sleep 0.3
 # ── Start server with auth ────────────────────────────────────────────
 info "Starting iftpfm2-web with Basic Auth on $BASE_URL..."
 ./target/debug/iftpfm2-web --config "$CONFIG_FILE" --listen "127.0.0.1:13579" \
-    --user "$AUTH_USER" --password "$AUTH_PASS" > /tmp/test_web_server.log 2>&1 &
+    --user "$AUTH_USER" --password "$AUTH_PASS" --logfile "$LOG_FILE" > /tmp/test_web_server.log 2>&1 &
 WEB_PID=$!
 
 # Wait for server
@@ -396,7 +420,7 @@ sleep 0.5
 
 # Restart with same config
 ./target/debug/iftpfm2-web --config "$CONFIG_FILE" --listen "127.0.0.1:13579" \
-    --user "$AUTH_USER" --password "$AUTH_PASS" > /tmp/test_web_server2.log 2>&1 &
+    --user "$AUTH_USER" --password "$AUTH_PASS" --logfile "$LOG_FILE" > /tmp/test_web_server2.log 2>&1 &
 WEB_PID=$!
 
 for i in $(seq 1 30); do
@@ -466,12 +490,115 @@ else
 fi
 
 # ====================================================================
+echo ""
+info "=== TEST SUITE: Log Viewer API ==="
+# ====================================================================
+
+echo ""
+info "Test 35: GET /api/logs/stats without --logfile → 404 (readonly server)"
+RESP=$(curl -s -u "$AUTH_USER:$AUTH_PASS" -w "\n%{http_code}" "http://127.0.0.1:13580/api/logs/stats")
+CODE=$(echo "$RESP" | tail -1)
+if [ "$CODE" = "404" ]; then pass "404 when no --logfile"; else fail "Expected 404, got $CODE"; fi
+
+echo ""
+info "Test 36: GET /api/logs/stats with --logfile → 200, exists=true"
+RESP=$(api_get "/api/logs/stats")
+CODE=$(status_code "$RESP")
+BODY=$(body "$RESP")
+if [ "$CODE" = "200" ]; then
+    EXISTS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['exists'])" 2>/dev/null || echo "")
+    SIZE=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['size'])" 2>/dev/null || echo "0")
+    if [ "$EXISTS" = "True" ] && [ "$SIZE" -gt "0" ] 2>/dev/null; then pass "exists=True, size=$SIZE"; else fail "Expected exists=True, got '$EXISTS', size='$SIZE'"; fi
+else
+    fail "Expected 200, got $CODE. Body: $BODY"
+fi
+
+echo ""
+info "Test 37: GET /api/logs?tail=100 → returns lines"
+RESP=$(api_get "/api/logs?tail=100")
+CODE=$(status_code "$RESP")
+BODY=$(body "$RESP")
+if [ "$CODE" = "200" ]; then
+    LCOUNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['lines']))" 2>/dev/null || echo "0")
+    if [ "$LCOUNT" -gt "0" ] 2>/dev/null; then pass "$LCOUNT lines returned"; else fail "Expected lines, got $LCOUNT"; fi
+else
+    fail "Expected 200, got $CODE"
+fi
+
+echo ""
+info "Test 38: GET /api/logs?tail=5 → exactly 5 lines"
+RESP=$(api_get "/api/logs?tail=5")
+CODE=$(status_code "$RESP")
+BODY=$(body "$RESP")
+if [ "$CODE" = "200" ]; then
+    LCOUNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['lines']))" 2>/dev/null || echo "0")
+    if [ "$LCOUNT" = "5" ]; then pass "5 lines returned"; else fail "Expected 5, got $LCOUNT"; fi
+else
+    fail "Expected 200, got $CODE"
+fi
+
+echo ""
+info "Test 39: GET /api/logs?tail=0 → empty lines"
+RESP=$(api_get "/api/logs?tail=0")
+CODE=$(status_code "$RESP")
+BODY=$(body "$RESP")
+if [ "$CODE" = "200" ]; then
+    LCOUNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['lines']))" 2>/dev/null || echo "-1")
+    if [ "$LCOUNT" = "0" ]; then pass "0 lines returned"; else fail "Expected 0, got $LCOUNT"; fi
+else
+    fail "Expected 200, got $CODE"
+fi
+
+echo ""
+info "Test 40: GET /api/logs?search=ERROR → ERROR lines only"
+RESP=$(api_get "/api/logs?search=ERROR&limit=100")
+CODE=$(status_code "$RESP")
+BODY=$(body "$RESP")
+if [ "$CODE" = "200" ]; then
+    LCOUNT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['lines']))" 2>/dev/null || echo "0")
+    ALL_ERROR=$(echo "$BODY" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+lines=d['lines']
+print('yes' if all('ERROR' in l for l in lines) else 'no')
+" 2>/dev/null || echo "no")
+    if [ "$LCOUNT" -gt "0" ] && [ "$ALL_ERROR" = "yes" ]; then pass "$LCOUNT ERROR lines, all contain ERROR"; else fail "Got $LCOUNT lines, all_error=$ALL_ERROR"; fi
+else
+    fail "Expected 200, got $CODE"
+fi
+
+echo ""
+info "Test 41: GET /api/logs?search=ZZZZNONEXISTENT → 0 lines"
+RESP=$(api_get "/api/logs?search=ZZZZNONEXISTENT")
+CODE=$(status_code "$RESP")
+BODY=$(body "$RESP")
+if [ "$CODE" = "200" ]; then
+    LCOUNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['lines']))" 2>/dev/null || echo "-1")
+    if [ "$LCOUNT" = "0" ]; then pass "0 lines for non-matching search"; else fail "Expected 0, got $LCOUNT"; fi
+else
+    fail "Expected 200, got $CODE"
+fi
+
+echo ""
+info "Test 42: GET /api/logs?search=ERROR&limit=2 → 2 lines, total_matches=3"
+RESP=$(api_get "/api/logs?search=ERROR&limit=2")
+CODE=$(status_code "$RESP")
+BODY=$(body "$RESP")
+if [ "$CODE" = "200" ]; then
+    LCOUNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['lines']))" 2>/dev/null || echo "-1")
+    TOTAL=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['total_matches'])" 2>/dev/null || echo "-1")
+    if [ "$LCOUNT" = "2" ] && [ "$TOTAL" = "3" ]; then pass "2 lines returned, total_matches=3"; else fail "Expected 2 lines/3 total, got $LCOUNT/$TOTAL"; fi
+else
+    fail "Expected 200, got $CODE"
+fi
+
+# ====================================================================
 # Summary
 # ====================================================================
 echo ""
 echo "=================================================="
 if [ "$FAIL_COUNT" -eq 0 ]; then
-    echo -e "${GREEN}All 34 tests passed!${NC}"
+    echo -e "${GREEN}All 42 tests passed!${NC}"
 else
     echo -e "${RED}$FAIL_COUNT test(s) failed${NC}"
 fi
