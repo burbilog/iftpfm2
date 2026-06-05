@@ -22,6 +22,8 @@ all:
 	@echo "  test-web-ui            - Web UI tests (agent-browser, skip if not installed)"
 	@echo ""
 	@echo "Other targets:"
+	@echo "  web-run    - Run web UI dev server on 0.0.0.0:3131 (no auth)"
+	@echo "  doc        - Generate Rust documentation"
 	@echo "  cloc       - Count lines of code (requires cloc utility)"
 
 # install into ~/.cargo/bin
