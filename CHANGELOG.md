@@ -2,6 +2,14 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.5.2] - 2026-06-05
+
+### Fixed
+
+- **iftpfm2-web**: Table truncation in Chromium-based browsers (Opera, Chrome) — Duplicate/Delete buttons clipped on wide monitors. Three CSS fixes: expanded `max-width` to 100%, changed `overflow: hidden` to `overflow-x: auto` for horizontal scroll, added `white-space: nowrap` on action buttons.
+
+---
+
 ## [2.5.1] - 2026-06-04
 
 ### Added
