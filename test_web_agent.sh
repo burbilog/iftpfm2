@@ -72,7 +72,7 @@ sleep 0.3
 # ── Start server (no auth) ───────────────────────────────────────────
 info "Starting iftpfm2-web on $BASE_URL..."
 ./target/debug/iftpfm2-web --config "$CONFIG_FILE" --listen "127.0.0.1:13581" \
-    > /tmp/test_web_agent.log 2>&1 &
+    --no-auth-i-know-what-im-doing > /tmp/test_web_agent.log 2>&1 &
 WEB_PID=$!
 
 for i in $(seq 1 30); do

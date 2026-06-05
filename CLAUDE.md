@@ -291,7 +291,7 @@ cargo doc --open
 - Axum + Tokio async web server
 - SPA frontend embedded via `include_str!("../static/index.html")` — single binary, no external files
 - API endpoints: `GET /api/configs`, `GET/PUT/DELETE /api/configs/{index}`, `POST /api/configs`, `POST /api/validate`
-- Basic Auth (optional): `--user`/`--password` CLI flags or `IFTPFM2_WEB_USER`/`IFTPFM2_WEB_PASSWORD` env vars
+- Basic Auth (required by default): `--user`/`--password` CLI flags or `IFTPFM2_WEB_USER`/`IFTPFM2_WEB_PASSWORD` env vars. Override with `--no-auth-i-know-what-im-doing`
   - Also accepts `IFTPM2_WEB_USER`/`IFTPM2_WEB_PASSWORD` (legacy typo fallback)
   - Uses `constant_time_eq` for password comparison (timing attack prevention)
 - Read-only mode: `--readonly` flag blocks POST/PUT/DELETE
@@ -357,6 +357,7 @@ cargo doc --open
 | `--config` | `<path>` | Path to JSONL config file (required) |
 | `--listen` | `<addr:port>` | Listen address:port (default: `127.0.0.1:3000`) |
 | `--readonly` | — | Read-only mode (blocks write operations) |
+| `--no-auth-i-know-what-im-doing` | — | Allow running without authentication (insecure) |
 | `--user` | `<login>` | Basic Auth username (env: `IFTPFM2_WEB_USER` or `IFTPM2_WEB_USER`) |
 | `--password` | `<pass>` | Basic Auth password (env: `IFTPFM2_WEB_PASSWORD` or `IFTPM2_WEB_PASSWORD`) |
 | `--logfile` | `<path>` | Path to iftpfm2 log file (enables Log Viewer tab) |

@@ -23,6 +23,7 @@ struct AppArgs {
     config_path: String,
     listen: String,
     readonly: bool,
+    no_auth: bool,
     user: Option<String>,
     password: Option<String>,
     logfile: Option<String>,
@@ -33,6 +34,7 @@ fn parse_args() -> AppArgs {
     let mut config_path = None;
     let mut listen = "127.0.0.1:3000".to_string();
     let mut readonly = false;
+    let mut no_auth = false;
     let mut user = None;
     let mut password = None;
     let mut logfile = None;
@@ -50,6 +52,9 @@ fn parse_args() -> AppArgs {
             }
             "--readonly" => {
                 readonly = true;
+            }
+            "--no-auth-i-know-what-im-doing" => {
+                no_auth = true;
             }
             "--user" => {
                 i += 1;
@@ -70,6 +75,8 @@ fn parse_args() -> AppArgs {
                       --config <path>     Path to JSONL config file (required)\n  \
                       --listen <addr>     Listen address:port (default: 127.0.0.1:3000)\n  \
                       --readonly          Read-only mode (disables write operations)\n  \
+                      --no-auth-i-know-what-im-doing\n  \
+                                        Allow running without authentication (insecure)\n  \
                       --logfile <path>    Path to log file for Log Viewer tab\n  \
                       --user <login>      Basic Auth username (env: IFTPFM2_WEB_USER)\n  \
                       --password <pass>   Basic Auth password (env: IFTPFM2_WEB_PASSWORD)\n  \
@@ -99,7 +106,7 @@ fn parse_args() -> AppArgs {
         std::process::exit(1);
     });
 
-    AppArgs { config_path, listen, readonly, user, password, logfile }
+    AppArgs { config_path, listen, readonly, no_auth, user, password, logfile }
 }
 
 // ── App state ─────────────────────────────────────────────────────────
@@ -522,8 +529,11 @@ async fn main() {
 
     if args.user.is_some() {
         eprintln!("Basic Auth enabled (user: {})", args.user.as_deref().unwrap_or(""));
+    } else if args.no_auth {
+        eprintln!("Warning: No authentication — anyone can access the UI");
     } else {
-        eprintln!("Warning: No authentication configured — anyone can access the UI");
+        eprintln!("Error: Authentication is required. Use --user and --password, or --no-auth-i-know-what-im-doing to disable.");
+        std::process::exit(1);
     }
 
     if let Some(ref lf) = args.logfile {

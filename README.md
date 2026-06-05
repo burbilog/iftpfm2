@@ -319,13 +319,14 @@ Options:
 | `--config` | `<path>` | Path to JSONL config file (required) | — |
 | `--listen` | `<addr:port>` | Listen address and port | `127.0.0.1:3000` |
 | `--readonly` | — | Read-only mode (disables write operations) | off |
+| `--no-auth-i-know-what-im-doing` | — | Allow running without authentication (insecure) | off |
 | `--user` | `<login>` | Basic Auth username (env: `IFTPFM2_WEB_USER`) | — |
 | `--password` | `<pass>` | Basic Auth password (env: `IFTPFM2_WEB_PASSWORD`) | — |
 | `--logfile` | `<path>` | Path to iftpfm2 log file (enables Log Viewer tab) | — |
 
 ### Authentication
 
-Basic Auth is optional but recommended. Credentials can be set via CLI flags or environment variables (`IFTPFM2_WEB_USER` / `IFTPFM2_WEB_PASSWORD`, or `IFTPM2_WEB_USER` / `IFTPM2_WEB_PASSWORD`). When no auth is configured, the server logs a warning.
+**Authentication is required by default.** You must provide `--user` and `--password` (or set `IFTPFM2_WEB_USER` / `IFTPFM2_WEB_PASSWORD` environment variables). To run without authentication, use `--no-auth-i-know-what-im-doing` (not recommended for production).
 
 ### API Endpoints
 
