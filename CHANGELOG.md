@@ -2,6 +2,16 @@
 
 All notable changes to iftpfm2 will be documented in this file.
 
+## [2.5.4] - 2026-06-05
+
+### Changed
+
+- **iftpfm2-web**: Authentication is now required by default — server refuses to start without `--user`/`--password`. Use `--no-auth-i-know-what-im-doing` flag to allow running without auth.
+- `make web-run` now uses `--no-auth-i-know-what-im-doing` for local development.
+- `make` usage help now lists `web-run` and `doc` targets.
+
+---
+
 ## [2.5.3] - 2026-06-05
 
 ### Added
@@ -609,6 +619,7 @@ After:  2026-03-10 14:40:46 [T0] [a3f2] Transferring files from ftp://...
 
 ## Version Reference
 
+- **2.5.4** - Auth required by default in iftpfm2-web, --no-auth-i-know-what-im-doing flag
 - **2.5.3** - Log Viewer tab in iftpfm2-web with server-side tail/search, TZ Offset help tooltips
 - **2.5.2** - Chromium table truncation fix for iftpfm2-web
 - **2.5.1** - Duplicate and Swap buttons for iftpfm2-web config editor, UI tests for new features

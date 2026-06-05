@@ -1,6 +1,6 @@
 [package]
 name = "iftpfm2"
-version = "2.5.3"
+version = "2.5.4"
 authors = ["Roman V. Isaev <rm@aroma.ru>"]
 edition = "2021"
 
