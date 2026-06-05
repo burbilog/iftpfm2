@@ -117,6 +117,9 @@ web:
 web-debug:
 	cargo build --bin iftpfm2-web --package iftpfm2-web
 
+web-run:
+	cargo run --bin iftpfm2-web --package iftpfm2-web -- --config sample.jsonl --listen 0.0.0.0:3131
+
 # run web API tests (curl-based, 34 tests)
 test-web:
 	cargo build --bin iftpfm2-web --package iftpfm2-web
