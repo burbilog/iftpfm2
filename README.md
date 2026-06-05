@@ -289,6 +289,7 @@ Web UI (iftpfm2-web)
 - **Protocol badges** — visual indicators for FTP/FTPS/SFTP protocols
 - **Password visibility toggles** — show/hide sensitive fields
 - **Search/filter** — filter configs by host, path, or comment
+- **Log Viewer** — view iftpfm2 log files directly in the browser with search and highlighting
 - **Keyboard shortcuts** — Escape closes modals
 - **Read-only mode** — disable write operations for production viewing
 
@@ -320,6 +321,7 @@ Options:
 | `--readonly` | — | Read-only mode (disables write operations) | off |
 | `--user` | `<login>` | Basic Auth username (env: `IFTPFM2_WEB_USER`) | — |
 | `--password` | `<pass>` | Basic Auth password (env: `IFTPFM2_WEB_PASSWORD`) | — |
+| `--logfile` | `<path>` | Path to iftpfm2 log file (enables Log Viewer tab) | — |
 
 ### Authentication
 
@@ -336,6 +338,9 @@ Basic Auth is optional but recommended. Credentials can be set via CLI flags or 
 | PUT | `/api/configs/{index}` | Update config entry |
 | DELETE | `/api/configs/{index}` | Delete config entry |
 | POST | `/api/validate` | Validate config without saving |
+| GET | `/api/logs/stats` | Log file metadata (size, exists) |
+| GET | `/api/logs?tail=N` | Last N log lines (default 1000) |
+| GET | `/api/logs?search=Q&limit=N` | Search log, return last N matches |
 
 All endpoints require Basic Auth when authentication is configured. Write endpoints (POST, PUT, DELETE) are blocked in read-only mode.
 
@@ -365,6 +370,12 @@ Read-only mode for monitoring:
 
 ~~~
 iftpfm2-web --config /etc/iftpfm2/prod.jsonl --readonly
+~~~
+
+With log viewer (log file must be the same one iftpfm2 writes to via `-l`):
+
+~~~
+iftpfm2-web --config /etc/iftpfm2/prod.jsonl --logfile /var/log/iftpfm2.log --user admin --password secret
 ~~~
 
 Using environment variables:
@@ -398,7 +409,7 @@ This runs:
 - Bind address test (`test_bind.sh`)
 - SFTP password auth test (`test_sftp_docker.sh`, auto-detected if Docker available)
 - SFTP SSH key auth test (`test_sftp_keys_docker.sh`, auto-detected if Docker available)
-- Web API tests (`test_web.sh`, 34 curl-based tests)
+- Web API tests (`test_web.sh`, 42 curl-based tests)
 - Web UI tests (`test_web_agent.sh`, if `agent-browser` is available)
 
 To run SFTP tests separately (requires Docker):
@@ -411,7 +422,7 @@ make test-sftp-keys   # SSH key authentication
 To run web tests separately:
 
 ~~~
-make test-web         # API tests (curl-based, 34 tests)
+make test-web         # API tests (curl-based, 42 tests)
 make test-web-ui      # UI tests (agent-browser, skip if not installed)
 ~~~
 
